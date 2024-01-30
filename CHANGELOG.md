@@ -1,4 +1,4 @@
-## Changelog for PortFwd - TCP/UDP Port Forwarder
+## CHANGELOG for PortFwd - TCP/UDP Port Forwarder
 
 #### 1.0.1 - 30th January 2024
 - Added support for `-conf` so you can specify TCP and/or UDP forwarders within a configuration file
