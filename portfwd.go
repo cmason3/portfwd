@@ -80,9 +80,9 @@ func parseArgs() (Args, error) {
   rfwdr := regexp.MustCompile(`^(:?(?:[0-9]+\.){3}[0-9]+:)?[0-9]+:(?:[0-9]+\.){3}[0-9]+:[0-9]+$`)
 
   for i := 1; i < len(os.Args); i++ {
-    if (os.Args[i] == "-tcp") || (os.Args[i] == "-udp") || (os.Args[i] == "-config") {
+    if smatch(os.Args[i], "-tcp", 2) || smatch(os.Args[i], "-udp", 2) || smatch(os.Args[i], "-config", 2) {
       if (len(os.Args) > (i + 1)) && !strings.HasPrefix(os.Args[i + 1], "-") {
-        if os.Args[i] == "-config" {
+        if smatch(os.Args[i], "-config", 2) {
           if file, err := os.Open(os.Args[i + 1]); err == nil {
             defer file.Close()
 
@@ -130,6 +130,17 @@ func parseArgs() (Args, error) {
     return args, fmt.Errorf("")
   }
   return args, nil
+}
+
+func smatch(a string, b string, mlen int) bool {
+  alen := len(a)
+  if alen >= mlen {
+    if len(b) < alen {
+      alen = len(b)
+    }
+    return a == b[:alen]
+  }
+  return false
 }
 
 func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {

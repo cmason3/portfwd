@@ -2,7 +2,7 @@
 
 A simple TCP and UDP based port forwarder which supports concurrent connections written in Go.
 
-### PortFwd Usage
+### Usage
 
 ```
  portfwd -tcp [bind_host:]<listen_port>:<remote_host>:<remote_port>
@@ -18,3 +18,6 @@ You also have the option of specifying multiple TCP and/or UDP forwarders (one p
 tcp [bind_host:]<listen_port>:<remote_host>:<remote_port>
 udp [bind_host:]<listen_port>:<remote_host>:<remote_port>
 ```
+
+Command line arguments can be shortened as long as they don't become ambiguous (e.g. `-t` for `-tcp` and `-c` for `-config`).
+
