@@ -45,7 +45,7 @@ type UDPConn struct {
 }
 
 func main() {
-  fmt.Fprintf(os.Stderr, "PortFwd %s - TCP/UDP Port Forwarder\n", Version)
+  fmt.Fprintf(os.Stderr, "PortFwd v%s - TCP/UDP Port Forwarder\n", Version)
   fmt.Fprintf(os.Stderr, "Copyright (c) 2024 Chris Mason <chris@netnix.org>\n\n")
 
   if args, err := parseArgs(); err == nil {
@@ -64,7 +64,7 @@ func main() {
 
   } else {
     if len(err.Error()) > 0 {
-      fmt.Fprintf(os.Stderr, "error: %v\n", err)
+      fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 
     } else {
       fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
@@ -156,7 +156,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
       if t, err := net.ResolveUDPAddr("udp", fwdr[2] + ":" + fwdr[3]); err == nil {
         buf := make([]byte, bufSize)
 
-        fmt.Printf("UDP Forwarder - %s -> %s...\n", fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
+        fmt.Fprintf(os.Stderr, "UDP Forwarder - %s -> %s...\n", fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
 
         go func(udpConns map[string]*UDPConn, dst string, udpConnsMutex *sync.RWMutex) {
           for {
@@ -177,7 +177,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
               udpConnsMutex.Lock()
               delete(udpConns, k)
               udpConnsMutex.Unlock()
-              fmt.Printf("- [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), k, dst)
+              fmt.Fprintf(os.Stdout, "- [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), k, dst)
             }
           }
         }(udpConns, fwdr[2] + ":" + fwdr[3], &udpConnsMutex)
@@ -189,7 +189,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
             udpConnsMutex.RUnlock()
 
             if !ok {
-              fmt.Printf("+ [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), addr, fwdr[2] + ":" + fwdr[3])
+              fmt.Fprintf(os.Stdout, "+ [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), addr, fwdr[2] + ":" + fwdr[3])
 
               if c, err := net.DialUDP("udp", nil, t); err == nil {
                 u = &UDPConn {
@@ -219,7 +219,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
                 ok = true
 
               } else {
-                fmt.Fprintf(os.Stderr, "error: %v\n", err)
+                fmt.Fprintf(os.Stdout, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
               }
             }
 
@@ -230,17 +230,17 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
               udpConnsMutex.Unlock()
             }
           } else {
-            fmt.Fprintf(os.Stderr, "error: %v\n", err)
+            fmt.Fprintf(os.Stdout, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
           }
         }
       } else {
-        fmt.Fprintf(os.Stderr, "error: %v\n", err)
+        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
       }
     } else {
-      fmt.Fprintf(os.Stderr, "error: %v\n", err)
+      fmt.Fprintf(os.Stderr, "Error: %v\n", err)
     }
   } else {
-    fmt.Fprintf(os.Stderr, "error: %v\n", err)
+    fmt.Fprintf(os.Stderr, "Error: %v\n", err)
   }
 }
 
@@ -251,13 +251,13 @@ func tcpForwarder(fwdr []string, wgf *sync.WaitGroup) {
     var wgc sync.WaitGroup
     defer s.Close()
 
-    fmt.Printf("TCP Forwarder - %s -> %s...\n", fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
+    fmt.Fprintf(os.Stderr, "TCP Forwarder - %s -> %s...\n", fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
 
     for {
       if c, err := s.Accept(); err == nil {
         wgc.Add(1)
 
-        fmt.Printf("+ [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), c.RemoteAddr(), fwdr[2] + ":" + fwdr[3])
+        fmt.Fprintf(os.Stdout, "+ [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), c.RemoteAddr(), fwdr[2] + ":" + fwdr[3])
 
         go func(nc net.Conn, dst string) {
           defer wgc.Done()
@@ -269,21 +269,21 @@ func tcpForwarder(fwdr []string, wgf *sync.WaitGroup) {
             go forwardTcp(nc, t)
             forwardTcp(t, nc)
 
-            fmt.Printf("- [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), nc.RemoteAddr(), dst)
+            fmt.Fprintf(os.Stdout, "- [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), nc.RemoteAddr(), dst)
 
           } else {
-            fmt.Fprintf(os.Stderr, "error: %v\n", err)
+            fmt.Fprintf(os.Stdout, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
           }
         }(c, fwdr[2] + ":" + fwdr[3])
 
       } else {
-        fmt.Fprintf(os.Stderr, "error: %v\n", err)
+        fmt.Fprintf(os.Stdout, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
       }
     }
     wgc.Wait()
 
   } else {
-    fmt.Fprintf(os.Stderr, "error: %v\n", err)
+    fmt.Fprintf(os.Stderr, "Error: %v\n", err)
   }
 }
 

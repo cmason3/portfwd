@@ -21,3 +21,8 @@ udp [bind_host:]<listen_port>:<remote_host>:<remote_port>
 
 Command line arguments can be shortened as long as they don't become ambiguous (e.g. `-t` for `-tcp` and `-c` for `-config`).
 
+If you want to background the process and log the connections to a file then you can use the following syntax:
+
+```
+portfwd <arguments> >~/portfwd.log &
+```
