@@ -28,7 +28,7 @@ import (
   "strings"
 )
 
-var Version = "1.0.0"
+var Version = "1.0.1"
 
 const (
   bufSize = 65535
@@ -69,6 +69,7 @@ func main() {
     } else {
       fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
       fmt.Fprintf(os.Stderr, "               -udp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
+      fmt.Fprintf(os.Stderr, "               -config <portfwd.conf>\n")
     }
   }
 }
@@ -79,17 +80,41 @@ func parseArgs() (Args, error) {
   rfwdr := regexp.MustCompile(`^(:?(?:[0-9]+\.){3}[0-9]+:)?[0-9]+:(?:[0-9]+\.){3}[0-9]+:[0-9]+$`)
 
   for i := 1; i < len(os.Args); i++ {
-    if (os.Args[i] == "-tcp") || (os.Args[i] == "-udp") {
+    if (os.Args[i] == "-tcp") || (os.Args[i] == "-udp") || (os.Args[i] == "-config") {
       if (len(os.Args) > (i + 1)) && !strings.HasPrefix(os.Args[i + 1], "-") {
-        for _, fwdr := range strings.Split(os.Args[i + 1], ",") {
-          if rfwdr.MatchString(fwdr) {
-            if strings.Count(fwdr, ":") == 2 {
-              fwdr = "127.0.0.1:" + fwdr
-            }
-            args.fwdrs = append(args.fwdrs, os.Args[i][1:] + ":" + fwdr)
+        if os.Args[i] == "-config" {
+          if file, err := os.Open(os.Args[i + 1]); err == nil {
+            defer file.Close()
 
+            s := bufio.NewScanner(file)
+
+            for s.Scan() {
+              t := strings.TrimSpace(s.Text())
+              if strings.HasPrefix(t, "tcp") || strings.HasPrefix(t, "udp") {
+                os.Args = append(os.Args, strings.Fields("-" + t)...)
+
+              } else if (len(t) > 0) && !strings.HasPrefix(t, "#") {
+                return args, fmt.Errorf("invalid configuration: %s", t)
+              }
+            }
+
+            if err := s.Err(); err != nil {
+              return args, err
+            }
           } else {
-            return args, fmt.Errorf("invalid forwarder: %s", fwdr)
+            return args, err
+          }
+        } else {
+          for _, fwdr := range strings.Split(os.Args[i + 1], ",") {
+            if rfwdr.MatchString(fwdr) {
+              if strings.Count(fwdr, ":") == 2 {
+                fwdr = "127.0.0.1:" + fwdr
+              }
+              args.fwdrs = append(args.fwdrs, os.Args[i][1:] + ":" + fwdr)
+
+            } else {
+              return args, fmt.Errorf("invalid forwarder: %s", fwdr)
+            }
           }
         }
         i += 1
