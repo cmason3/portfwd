@@ -28,7 +28,7 @@ import (
   "strings"
 )
 
-var Version = "1.0.0"
+var Version = "1.0.1"
 
 const (
   bufSize = 65535
@@ -45,7 +45,7 @@ type UDPConn struct {
 }
 
 func main() {
-  fmt.Fprintf(os.Stderr, "PortFwd %s - TCP/UDP Port Forwarder\n", Version)
+  fmt.Fprintf(os.Stderr, "PortFwd v%s - TCP/UDP Port Forwarder\n", Version)
   fmt.Fprintf(os.Stderr, "Copyright (c) 2024 Chris Mason <chris@netnix.org>\n\n")
 
   if args, err := parseArgs(); err == nil {
@@ -64,11 +64,12 @@ func main() {
 
   } else {
     if len(err.Error()) > 0 {
-      fmt.Fprintf(os.Stderr, "error: %v\n", err)
+      fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 
     } else {
       fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
       fmt.Fprintf(os.Stderr, "               -udp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
+      fmt.Fprintf(os.Stderr, "               -config <portfwd.conf>\n")
     }
   }
 }
@@ -79,17 +80,41 @@ func parseArgs() (Args, error) {
   rfwdr := regexp.MustCompile(`^(:?(?:[0-9]+\.){3}[0-9]+:)?[0-9]+:(?:[0-9]+\.){3}[0-9]+:[0-9]+$`)
 
   for i := 1; i < len(os.Args); i++ {
-    if (os.Args[i] == "-tcp") || (os.Args[i] == "-udp") {
+    if smatch(os.Args[i], "-tcp", 2) || smatch(os.Args[i], "-udp", 2) || smatch(os.Args[i], "-config", 2) {
       if (len(os.Args) > (i + 1)) && !strings.HasPrefix(os.Args[i + 1], "-") {
-        for _, fwdr := range strings.Split(os.Args[i + 1], ",") {
-          if rfwdr.MatchString(fwdr) {
-            if strings.Count(fwdr, ":") == 2 {
-              fwdr = "127.0.0.1:" + fwdr
-            }
-            args.fwdrs = append(args.fwdrs, os.Args[i][1:] + ":" + fwdr)
+        if smatch(os.Args[i], "-config", 2) {
+          if file, err := os.Open(os.Args[i + 1]); err == nil {
+            defer file.Close()
 
+            s := bufio.NewScanner(file)
+
+            for s.Scan() {
+              t := strings.TrimSpace(s.Text())
+              if strings.HasPrefix(t, "tcp") || strings.HasPrefix(t, "udp") {
+                os.Args = append(os.Args, strings.Fields("-" + t)...)
+
+              } else if (len(t) > 0) && !strings.HasPrefix(t, "#") {
+                return args, fmt.Errorf("invalid configuration: %s", t)
+              }
+            }
+
+            if err := s.Err(); err != nil {
+              return args, err
+            }
           } else {
-            return args, fmt.Errorf("invalid forwarder: %s", fwdr)
+            return args, err
+          }
+        } else {
+          for _, fwdr := range strings.Split(os.Args[i + 1], ",") {
+            if rfwdr.MatchString(fwdr) {
+              if strings.Count(fwdr, ":") == 2 {
+                fwdr = "127.0.0.1:" + fwdr
+              }
+              args.fwdrs = append(args.fwdrs, os.Args[i][1:] + ":" + fwdr)
+
+            } else {
+              return args, fmt.Errorf("invalid forwarder: %s", fwdr)
+            }
           }
         }
         i += 1
@@ -107,6 +132,17 @@ func parseArgs() (Args, error) {
   return args, nil
 }
 
+func smatch(a string, b string, mlen int) bool {
+  alen := len(a)
+  if alen >= mlen {
+    if len(b) < alen {
+      alen = len(b)
+    }
+    return a == b[:alen]
+  }
+  return false
+}
+
 func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
   defer wgf.Done()
 
@@ -120,7 +156,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
       if t, err := net.ResolveUDPAddr("udp", fwdr[2] + ":" + fwdr[3]); err == nil {
         buf := make([]byte, bufSize)
 
-        fmt.Printf("UDP Forwarder - %s -> %s...\n", fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
+        fmt.Fprintf(os.Stderr, "UDP Forwarder - %s -> %s...\n", fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
 
         go func(udpConns map[string]*UDPConn, dst string, udpConnsMutex *sync.RWMutex) {
           for {
@@ -141,7 +177,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
               udpConnsMutex.Lock()
               delete(udpConns, k)
               udpConnsMutex.Unlock()
-              fmt.Printf("- [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), k, dst)
+              fmt.Fprintf(os.Stdout, "- [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), k, dst)
             }
           }
         }(udpConns, fwdr[2] + ":" + fwdr[3], &udpConnsMutex)
@@ -153,7 +189,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
             udpConnsMutex.RUnlock()
 
             if !ok {
-              fmt.Printf("+ [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), addr, fwdr[2] + ":" + fwdr[3])
+              fmt.Fprintf(os.Stdout, "+ [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), addr, fwdr[2] + ":" + fwdr[3])
 
               if c, err := net.DialUDP("udp", nil, t); err == nil {
                 u = &UDPConn {
@@ -183,7 +219,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
                 ok = true
 
               } else {
-                fmt.Fprintf(os.Stderr, "error: %v\n", err)
+                fmt.Fprintf(os.Stdout, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
               }
             }
 
@@ -194,17 +230,17 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
               udpConnsMutex.Unlock()
             }
           } else {
-            fmt.Fprintf(os.Stderr, "error: %v\n", err)
+            fmt.Fprintf(os.Stdout, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
           }
         }
       } else {
-        fmt.Fprintf(os.Stderr, "error: %v\n", err)
+        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
       }
     } else {
-      fmt.Fprintf(os.Stderr, "error: %v\n", err)
+      fmt.Fprintf(os.Stderr, "Error: %v\n", err)
     }
   } else {
-    fmt.Fprintf(os.Stderr, "error: %v\n", err)
+    fmt.Fprintf(os.Stderr, "Error: %v\n", err)
   }
 }
 
@@ -215,13 +251,13 @@ func tcpForwarder(fwdr []string, wgf *sync.WaitGroup) {
     var wgc sync.WaitGroup
     defer s.Close()
 
-    fmt.Printf("TCP Forwarder - %s -> %s...\n", fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
+    fmt.Fprintf(os.Stderr, "TCP Forwarder - %s -> %s...\n", fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
 
     for {
       if c, err := s.Accept(); err == nil {
         wgc.Add(1)
 
-        fmt.Printf("+ [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), c.RemoteAddr(), fwdr[2] + ":" + fwdr[3])
+        fmt.Fprintf(os.Stdout, "+ [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), c.RemoteAddr(), fwdr[2] + ":" + fwdr[3])
 
         go func(nc net.Conn, dst string) {
           defer wgc.Done()
@@ -233,21 +269,21 @@ func tcpForwarder(fwdr []string, wgf *sync.WaitGroup) {
             go forwardTcp(nc, t)
             forwardTcp(t, nc)
 
-            fmt.Printf("- [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), nc.RemoteAddr(), dst)
+            fmt.Fprintf(os.Stdout, "- [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), nc.RemoteAddr(), dst)
 
           } else {
-            fmt.Fprintf(os.Stderr, "error: %v\n", err)
+            fmt.Fprintf(os.Stdout, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
           }
         }(c, fwdr[2] + ":" + fwdr[3])
 
       } else {
-        fmt.Fprintf(os.Stderr, "error: %v\n", err)
+        fmt.Fprintf(os.Stdout, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
       }
     }
     wgc.Wait()
 
   } else {
-    fmt.Fprintf(os.Stderr, "error: %v\n", err)
+    fmt.Fprintf(os.Stderr, "Error: %v\n", err)
   }
 }
 
