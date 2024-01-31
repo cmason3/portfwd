@@ -282,7 +282,6 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup, args *Args) {
 
               } else {
                 log(args, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
-                // fmt.Fprintf(os.Stdout, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
               }
             }
 

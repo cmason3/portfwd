@@ -1,6 +1,7 @@
 ## CHANGELOG
 
-#### 1.0.2 - Pending
+#### 1.0.2 - 31st January 2024
+- Added support for `-logfile` so you can specify where to log instead of `stdout`
 - When a connection is closed the total number of bytes sent and received is now printed
 
 #### 1.0.1 - 30th January 2024
