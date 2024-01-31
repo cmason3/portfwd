@@ -28,7 +28,7 @@ import (
   "strings"
 )
 
-var Version = "1.0.1"
+var Version = "1.0.2"
 
 const (
   bufSize = 65535
@@ -41,6 +41,7 @@ type Args struct {
 
 type UDPConn struct {
   dst *net.UDPConn
+  txRxBytes [2]float64
   lastActivity time.Time
 }
 
@@ -143,6 +144,20 @@ func smatch(a string, b string, mlen int) bool {
   return false
 }
 
+func formatBytes(b float64) string {
+  var u string
+  for _, u = range []string{"", "k", "M", "G", "T", "P", "E", "Z", "Y"} {
+    if b >= 1000 {
+      b /= 1000
+
+    } else {
+      break
+    }
+  }
+  r := strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", b), "0"), ".")
+  return fmt.Sprintf("%s %sB", r, u)
+}
+
 func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
   defer wgf.Done()
 
@@ -175,9 +190,10 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
 
             for _, k := range staleConns {
               udpConnsMutex.Lock()
+              txRxBytes := udpConns[k].txRxBytes
               delete(udpConns, k)
               udpConnsMutex.Unlock()
-              fmt.Fprintf(os.Stdout, "- [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), k, dst)
+              fmt.Fprintf(os.Stdout, "- [%s] UDP: %s -> %s (Tx: %s, Rx: %s)\n", time.Now().Format(time.StampMilli), k, dst, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
             }
           }
         }(udpConns, fwdr[2] + ":" + fwdr[3], &udpConnsMutex)
@@ -209,6 +225,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
                       s.WriteToUDP(buf[:n], addr)
                       udpConnsMutex.Lock()
                       u.lastActivity = time.Now()
+                      u.txRxBytes[1] += float64(n)
                       udpConnsMutex.Unlock()
 
                     } else {
@@ -227,6 +244,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup) {
               u.dst.Write(buf[:n])
               udpConnsMutex.Lock()
               u.lastActivity = time.Now()
+              u.txRxBytes[0] += float64(n)
               udpConnsMutex.Unlock()
             }
           } else {
@@ -265,11 +283,12 @@ func tcpForwarder(fwdr []string, wgf *sync.WaitGroup) {
 
           if t, err := net.Dial("tcp", fwdr[2] + ":" + fwdr[3]); err == nil {
             defer t.Close()
-          
-            go forwardTcp(nc, t)
-            forwardTcp(t, nc)
 
-            fmt.Fprintf(os.Stdout, "- [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), nc.RemoteAddr(), dst)
+            var txRxBytes [2]float64
+            go forwardTcp(nc, t, &txRxBytes[0])
+            forwardTcp(t, nc, &txRxBytes[1])
+
+            fmt.Fprintf(os.Stdout, "- [%s] TCP: %s -> %s (Tx: %s, Rx: %s)\n", time.Now().Format(time.StampMilli), nc.RemoteAddr(), dst, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
 
           } else {
             fmt.Fprintf(os.Stdout, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
@@ -287,7 +306,7 @@ func tcpForwarder(fwdr []string, wgf *sync.WaitGroup) {
   }
 }
 
-func forwardTcp(src net.Conn, dst net.Conn) {
+func forwardTcp(src net.Conn, dst net.Conn, txRxBytes *float64) {
   r := bufio.NewReader(src)
   w := bufio.NewWriter(dst)
 
@@ -297,6 +316,7 @@ func forwardTcp(src net.Conn, dst net.Conn) {
     if n, err := r.Read(buf); err == nil {
       w.Write(buf[:n])
       w.Flush()
+      *txRxBytes += float64(n)
 
     } else {
       dst.Close()
