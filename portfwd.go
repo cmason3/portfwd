@@ -146,7 +146,7 @@ func smatch(a string, b string, mlen int) bool {
 
 func formatBytes(b float64) string {
   var u string
-  for _, u = range []string{"", "k", "M", "G", "T", "P", "E", "Z", "Y"} {
+  for _, u = range []string{"", "k", "M", "G", "T", "P", "E"} {
     if b >= 1000 {
       b /= 1000
 
