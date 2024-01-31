@@ -54,13 +54,10 @@ func main() {
 
   if args, err := parseArgs(); err == nil {
     if len(args.logFile) > 0 {
-      if file, err := os.OpenFile(args.logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
-        file.Close()
-
+      if err := log(&args, "[%s] Starting PortFwd v%s...\n", time.Now().Format(time.StampMilli), Version); err == nil {
         fmt.Fprintf(os.Stdout, "Logging to %s...\n", args.logFile)
 
       } else {
-        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
         os.Exit(0)
       }
     }
@@ -184,7 +181,7 @@ func formatBytes(b float64) string {
   return fmt.Sprintf("%s %sB", r, u)
 }
 
-func log(args *Args, f string, a ...interface{}) {
+func log(args *Args, f string, a ...interface{}) error {
   if len(args.logFile) > 0 {
     args.logFileMutex.Lock()
     defer args.logFileMutex.Unlock()
@@ -198,10 +195,12 @@ func log(args *Args, f string, a ...interface{}) {
 
     } else {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+      return err
     }
   } else {
     fmt.Fprintf(os.Stdout, f, a...)
   }
+  return nil
 }
 
 func udpForwarder(fwdr []string, wgf *sync.WaitGroup, args *Args) {
