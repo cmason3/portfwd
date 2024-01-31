@@ -7,6 +7,7 @@ A simple TCP and UDP based port forwarder which supports concurrent connections 
 ```
  portfwd -tcp [bind_host:]<listen_port>:<remote_host>:<remote_port>
          -udp [bind_host:]<listen_port>:<remote_host>:<remote_port>
+         -logfile <portfwd.log>
          -config <portfwd.conf>
 ```
 
@@ -24,5 +25,5 @@ Command line arguments can be shortened as long as they don't become ambiguous (
 If you want to background the process and log the connections to a file then you can use the following syntax:
 
 ```
-portfwd <arguments> >~/portfwd.log &
+portfwd <arguments> -logfile <portfwd.log> &
 ```
