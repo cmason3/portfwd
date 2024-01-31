@@ -58,7 +58,7 @@ func main() {
         fmt.Fprintf(os.Stdout, "Logging to %s...\n", args.logFile)
 
       } else {
-        os.Exit(0)
+        return
       }
     }
 
