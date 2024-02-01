@@ -57,11 +57,8 @@ func main() {
 
   if args, err := parseArgs(); err == nil {
     if len(args.logFile) > 0 {
-      if err := log(&args, "[%s] Starting PortFwd v%s...\n", time.Now().Format(time.StampMilli), Version); err == nil {
-        fmt.Fprintf(os.Stdout, "Logging to %s...\n", args.logFile)
-
-      } else {
-        return
+      if err := log(&args, "[%s] Starting PortFwd v%s...\n", time.Now().Format(time.StampMilli), Version); err != nil {
+        os.Exit(1)
       }
     }
 
@@ -102,6 +99,7 @@ func main() {
       fmt.Fprintf(os.Stderr, "               -logfile <portfwd.log>\n")
       fmt.Fprintf(os.Stderr, "               -config <portfwd.conf>\n")
     }
+    os.Exit(1)
   }
 }
 
