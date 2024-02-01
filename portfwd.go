@@ -26,10 +26,12 @@ import (
   "bufio"
   "regexp"
   "strings"
+  "syscall"
+  "os/signal"
   "path/filepath"
 )
 
-var Version = "1.0.2"
+var Version = "1.0.3"
 
 const (
   bufSize = 65535
@@ -40,6 +42,7 @@ type Args struct {
   fwdrs []string
   logFile string
   logFileMutex sync.Mutex
+  shutdown chan struct{}
 }
 
 type UDPConn struct {
@@ -62,20 +65,33 @@ func main() {
       }
     }
 
+    signals := make(chan os.Signal, 1)
+    signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+    args.shutdown = make(chan struct{})
+
+    go func(args *Args) {
+      log(args, "[%s] Caught '%s' Signal... Terminating...\n", time.Now().Format(time.StampMilli), <-signals)
+      close(args.shutdown)
+    }(&args)
+
     var wgf sync.WaitGroup
     for _, fwdr := range args.fwdrs {
-      switch efwdr := strings.Split(fwdr, ":"); efwdr[0] {
-        case "tcp":
-          wgf.Add(1)
-          go tcpForwarder(efwdr[1:], &wgf, &args)
+      efwdr := strings.Split(fwdr, ":")
 
-        case "udp":
-          wgf.Add(1)
-          go udpForwarder(efwdr[1:], &wgf, &args)
+      if smatch(efwdr[0], "tcp", 1) {
+        wgf.Add(1)
+        go tcpForwarder(efwdr[1:], &wgf, &args)
+
+      } else if smatch(efwdr[0], "udp", 1) {
+        wgf.Add(1)
+        go udpForwarder(efwdr[1:], &wgf, &args)
       }
     }
     wgf.Wait()
 
+    if len(args.logFile) > 0 {
+      log(&args, "[%s] PortFwd Terminated\n", time.Now().Format(time.StampMilli))
+    }
   } else {
     if len(err.Error()) > 0 {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -214,15 +230,32 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup, args *Args) {
       defer s.Close()
 
       if t, err := net.ResolveUDPAddr("udp", fwdr[2] + ":" + fwdr[3]); err == nil {
+        var wgc sync.WaitGroup
         buf := make([]byte, bufSize)
 
         log(args, "[%s] Creating UDP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
 
-        go func(udpConns map[string]*UDPConn, dst string, udpConnsMutex *sync.RWMutex) {
+        wgc.Add(1)
+
+        go func(udpConns map[string]*UDPConn, dst string, udpConnsMutex *sync.RWMutex, shutdown chan struct{}) {
+          defer wgc.Done()
+          var stop bool
+
           for {
+            select {
+              case <-shutdown:
+                stop = true
+
+              default:
+            }
+
             var staleConns []string
 
             udpConnsMutex.RLock()
+            if (len(udpConns) == 0) && stop {
+              udpConnsMutex.RUnlock()
+              break
+            }
             for k, v := range udpConns {
               if v.lastActivity.Before(time.Now().Add(-udpIdleTimeout)) {
                 v.dst.Close()
@@ -231,7 +264,7 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup, args *Args) {
             }
             udpConnsMutex.RUnlock()
 
-            time.Sleep(time.Second * 15)
+            time.Sleep(time.Second * 5)
 
             for _, k := range staleConns {
               udpConnsMutex.Lock()
@@ -241,7 +274,19 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup, args *Args) {
               log(args, "- [%s] UDP: %s -> %s (Tx: %s, Rx: %s)\n", time.Now().Format(time.StampMilli), k, dst, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
             }
           }
-        }(udpConns, fwdr[2] + ":" + fwdr[3], &udpConnsMutex)
+        }(udpConns, fwdr[2] + ":" + fwdr[3], &udpConnsMutex, args.shutdown)
+
+        go func(shutdown chan struct{}, udpConns map[string]*UDPConn, udpConnsMutex *sync.RWMutex) {
+          <-shutdown
+          s.Close()
+
+          udpConnsMutex.Lock()
+          for _, v := range udpConns {
+            v.dst.Close()
+            v.lastActivity = time.Time{}
+          }
+          udpConnsMutex.Unlock()
+        }(args.shutdown, udpConns, &udpConnsMutex)
 
         for {
           if n, addr, err := s.ReadFrom(buf); err == nil {
@@ -262,7 +307,10 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup, args *Args) {
                 udpConns[addr.String()] = u
                 udpConnsMutex.Unlock()
 
+                wgc.Add(1)
+
                 go func(u *UDPConn, s *net.UDPConn, addr *net.UDPAddr) {
+                  defer wgc.Done()
                   buf := make([]byte, bufSize)
                   
                   for { 
@@ -293,9 +341,13 @@ func udpForwarder(fwdr []string, wgf *sync.WaitGroup, args *Args) {
               udpConnsMutex.Unlock()
             }
           } else {
-            log(args, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
+            break
           }
         }
+        wgc.Wait()
+
+        log(args, "[%s] Stopping UDP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
+
       } else {
         fmt.Fprintf(os.Stderr, "Error: %v\n", err)
       }
@@ -315,6 +367,11 @@ func tcpForwarder(fwdr []string, wgf *sync.WaitGroup, args *Args) {
     defer s.Close()
 
     log(args, "[%s] Creating TCP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
+
+    go func(shutdown chan struct{}) {
+      <-shutdown
+      s.Close()
+    }(args.shutdown)
 
     for {
       if c, err := s.Accept(); err == nil {
@@ -341,10 +398,12 @@ func tcpForwarder(fwdr []string, wgf *sync.WaitGroup, args *Args) {
         }(c, fwdr[2] + ":" + fwdr[3])
 
       } else {
-        log(args, "! [%s] Error: %v\n", time.Now().Format(time.StampMilli), err)
+        break
       }
     }
     wgc.Wait()
+
+    log(args, "[%s] Stopping TCP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], fwdr[2] + ":" + fwdr[3])
 
   } else {
     fmt.Fprintf(os.Stderr, "Error: %v\n", err)
