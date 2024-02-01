@@ -1,6 +1,6 @@
 ## CHANGELOG
 
-#### 1.0.3 - Pending
+#### 1.0.3 - 1st February 2024
 - Fixed an issue where shortened command line arguments weren't working for forwarders
 - Added support for `SIGTERM` and `SIGINT` signals so we terminate gracefully
 - Sort out exit codes so we have 0 on success and 1 on failure
