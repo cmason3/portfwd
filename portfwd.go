@@ -306,7 +306,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
           udpConnsMutex.RUnlock()
 
           if !ok {
-            target := strings.Split(targets[0], ":") // ALWAYS USE FIRST TARGET AT THE MOMENT
+            target := strings.Split(targets[hash(addr.String(), 1)], ":")
             log(args, "+ [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), addr, target[0] + ":" + target[1])
 
             if t, err := net.ResolveUDPAddr("udp", target[0] + ":" + target[1]); err == nil {
@@ -391,8 +391,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       if c, err := s.Accept(); err == nil {
         wgc.Add(1)
 
-        // target := strings.Split(targets[hash(c.RemoteAddr().String(), len(targets))], ":")
-        target := strings.Split(targets[0], ":") // ALWAYS USE FIRST TARGET AT THE MOMENT
+        target := strings.Split(targets[hash(c.RemoteAddr().String(), 1)], ":")
         log(args, "+ [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), c.RemoteAddr(), target[0] + ":" + target[1])
 
         go func(nc net.Conn, target string) {
