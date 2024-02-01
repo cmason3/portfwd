@@ -243,7 +243,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       var wgc sync.WaitGroup
       buf := make([]byte, bufSize)
 
-      log(args, "[%s] Creating UDP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], strings.Join(targets[:1], ","))
+      log(args, "[%s] Creating UDP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], targets)
 
       wgc.Add(1)
 
@@ -306,7 +306,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
           udpConnsMutex.RUnlock()
 
           if !ok {
-            target := strings.Split(targets[hash(addr.String(), 1)], ":")
+            target := strings.Split(targets[hash(addr.String(), len(targets))], ":")
             log(args, "+ [%s] UDP: %s -> %s\n", time.Now().Format(time.StampMilli), addr, target[0] + ":" + target[1])
 
             if t, err := net.ResolveUDPAddr("udp", target[0] + ":" + target[1]); err == nil {
@@ -363,7 +363,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       }
       wgc.Wait()
 
-      log(args, "[%s] Stopping UDP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], strings.Join(targets[:1], ","))
+      log(args, "[%s] Stopping UDP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], targets)
 
     } else {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -380,7 +380,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
     var wgc sync.WaitGroup
     defer s.Close()
 
-    log(args, "[%s] Creating TCP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], strings.Join(targets[:1], ","))
+    log(args, "[%s] Creating TCP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], targets)
 
     go func(shutdown chan struct{}) {
       <-shutdown
@@ -391,14 +391,14 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       if c, err := s.Accept(); err == nil {
         wgc.Add(1)
 
-        target := strings.Split(targets[hash(c.RemoteAddr().String(), 1)], ":")
+        target := strings.Split(targets[hash(c.RemoteAddr().String(), len(targets))], ":")
         log(args, "+ [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), c.RemoteAddr(), target[0] + ":" + target[1])
 
         go func(nc net.Conn, target string) {
           defer wgc.Done()
           defer nc.Close()
 
-          if t, err := net.Dial("tcp", target); err == nil {
+          if t, err := net.DialTimeout("tcp", target, time.Second * 5); err == nil {
             defer t.Close()
 
             var txRxBytes [2]float64
@@ -418,7 +418,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
     }
     wgc.Wait()
 
-    log(args, "[%s] Stopping TCP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], strings.Join(targets[:1], ","))
+    log(args, "[%s] Stopping TCP Forwarder: %s -> %s...\n", time.Now().Format(time.StampMilli), fwdr[0] + ":" + fwdr[1], targets)
 
   } else {
     fmt.Fprintf(os.Stderr, "Error: %v\n", err)
