@@ -199,6 +199,15 @@ func formatBytes(b float64) string {
   return fmt.Sprintf("%s %sB", r, u)
 }
 
+func hash(s string, buckets int) int {
+  var hash uint64 = 5381
+
+  for _, c := range s {
+    hash = ((hash << 5) + hash) + uint64(c)
+  }
+  return int(hash % uint64(buckets))
+}
+
 func log(args *Args, f string, a ...interface{}) error {
   if len(args.logFile) > 0 {
     args.logFileMutex.Lock()
@@ -382,6 +391,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       if c, err := s.Accept(); err == nil {
         wgc.Add(1)
 
+        // target := strings.Split(targets[hash(c.RemoteAddr().String(), len(targets))], ":")
         target := strings.Split(targets[0], ":") // ALWAYS USE FIRST TARGET AT THE MOMENT
         log(args, "+ [%s] TCP: %s -> %s\n", time.Now().Format(time.StampMilli), c.RemoteAddr(), target[0] + ":" + target[1])
 
