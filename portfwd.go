@@ -15,6 +15,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+ /*
+  * Format targets with ,
+  * round-robin for targets - get rid of hash
+  * Don't output time if systemd mode
+  */
+
 package main
 
 import (
@@ -53,9 +59,6 @@ type UDPConn struct {
 }
 
 func main() {
-  fmt.Fprintf(os.Stdout, "PortFwd v%s - TCP/UDP Port Forwarder\n", Version)
-  fmt.Fprintf(os.Stdout, "Copyright (c) 2024 Chris Mason <chris@netnix.org>\n\n")
-
   if args, err := parseArgs(); err == nil {
     if len(args.logFile) > 0 {
       if err := log(&args, "[%s] Starting PortFwd v%s...\n", time.Now().Format(time.StampMilli), Version); err != nil {
@@ -90,6 +93,9 @@ func main() {
       log(&args, "[%s] PortFwd Terminated\n", time.Now().Format(time.StampMilli))
     }
   } else {
+    fmt.Fprintf(os.Stdout, "PortFwd v%s - TCP/UDP Port Forwarder\n", Version)
+    fmt.Fprintf(os.Stdout, "Copyright (c) 2024 Chris Mason <chris@netnix.org>\n\n")
+
     if len(err.Error()) > 0 {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 
