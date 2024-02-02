@@ -17,10 +17,13 @@ jobs:
       - run: |
           env GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" portfwd.go
           tar zcvf portfwd-${{ github.ref_name }}-linux-amd64.tar.gz portfwd
-          sh -c "ls -la"
 
       - run: |
           env GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" portfwd.go
-          zip portfwd-${{ github.ref_name }}-windows-x86_64.tar.gz portfwd.exe
-          sh -c "ls -la"
-        
+          zip portfwd-${{ github.ref_name }}-windows-x86_64.zip portfwd.exe
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            portfwd-${{ github.ref_name }}-linux-amd64.tar.gz
+            portfwd-${{ github.ref_name }}-windows-x86_64.zip
