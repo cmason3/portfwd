@@ -26,7 +26,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v1
         with:
-          body: new version
+          name: PortFwd v${{ github.ref_name }}
+          body: '[CHANGELOG](CHANGELOG.md)'
           files: |
             portfwd-${{ github.ref_name }}-linux-amd64.tar.gz
             portfwd-${{ github.ref_name }}-windows-x86_64.zip
