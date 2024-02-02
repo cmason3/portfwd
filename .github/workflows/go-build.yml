@@ -23,6 +23,8 @@ jobs:
           zip portfwd-${{ github.ref_name }}-windows-x86_64.zip portfwd.exe
 
       - uses: softprops/action-gh-release@v1
+        permissions:
+          contents: write
         with:
           files: |
             portfwd-${{ github.ref_name }}-linux-amd64.tar.gz
