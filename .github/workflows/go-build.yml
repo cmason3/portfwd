@@ -26,6 +26,7 @@ jobs:
 
       - uses: softprops/action-gh-release@v1
         with:
+          body: new version
           files: |
             portfwd-${{ github.ref_name }}-linux-amd64.tar.gz
             portfwd-${{ github.ref_name }}-windows-x86_64.zip
