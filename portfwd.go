@@ -15,10 +15,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
- /*
-  * round-robin for targets - get rid of hash
-  */
-
 package main
 
 import (
@@ -35,7 +31,7 @@ import (
   "path/filepath"
 )
 
-var Version = "1.0.4-dev"
+var Version = "1.0.4"
 
 const (
   bufSize = 65535
@@ -91,8 +87,8 @@ func main() {
       log(&args, "PortFwd Terminated\n")
     }
   } else {
-    fmt.Fprintf(os.Stdout, "PortFwd v%s - TCP/UDP Port Forwarder\n", Version)
-    fmt.Fprintf(os.Stdout, "Copyright (c) 2024 Chris Mason <chris@netnix.org>\n\n")
+    fmt.Fprintf(os.Stderr, "PortFwd v%s - TCP/UDP Port Forwarder\n", Version)
+    fmt.Fprintf(os.Stderr, "Copyright (c) 2024 Chris Mason <chris@netnix.org>\n\n")
 
     if len(err.Error()) > 0 {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -203,15 +199,6 @@ func formatBytes(b float64) string {
   return fmt.Sprintf("%s %sB", r, u)
 }
 
-func hash(s string, buckets int) int {
-  var hash uint64 = 5381
-
-  for _, c := range s {
-    hash = ((hash << 5) + hash) + uint64(c)
-  }
-  return int(hash % uint64(buckets))
-}
-
 func log(args *Args, f string, a ...interface{}) error {
   ts := fmt.Sprintf("[%s] ", time.Now().Format(time.StampMilli))
 
@@ -251,6 +238,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
     if s, err := net.ListenUDP("udp", udpAddr); err == nil {
       defer s.Close()
 
+      var connCount int
       var wgc sync.WaitGroup
       buf := make([]byte, bufSize)
 
@@ -318,7 +306,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
           udpConnsMutex.RUnlock()
 
           if !ok {
-            target := strings.Split(targets[hash(addr.String(), len(targets))], ":")
+            target := strings.Split(targets[connCount % len(targets)], ":")
             log(args, "+ UDP: %s -> %s\n", addr, target[0] + ":" + target[1])
 
             if t, err := net.ResolveUDPAddr("udp", target[0] + ":" + target[1]); err == nil {
@@ -355,10 +343,10 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
                 ok = true
   
               } else {
-                log(args, "! Error: %v\n", err)
+                log(args, "- UDP: %s -> %s (Error: %v)\n", addr, target[0] + ":" + target[1], err)
               }
             } else {
-              log(args, "! Error: %v\n", err)
+              log(args, "- UDP: %s -> %s (Error: %v)\n", addr, target[0] + ":" + target[1], err)
             }
           }
 
@@ -369,6 +357,8 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
             u.txRxBytes[0] += float64(n)
             udpConnsMutex.Unlock()
           }
+          connCount += 1
+
         } else {
           break
         }
@@ -389,6 +379,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
   defer wgf.Done()
 
   if s, err := net.Listen("tcp", fwdr[0] + ":" + fwdr[1]); err == nil {
+    var connCount int
     var wgc sync.WaitGroup
     defer s.Close()
 
@@ -404,7 +395,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       if c, err := s.Accept(); err == nil {
         wgc.Add(1)
 
-        target := strings.Split(targets[hash(c.RemoteAddr().String(), len(targets))], ":")
+        target := strings.Split(targets[connCount % len(targets)], ":")
         log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), target[0] + ":" + target[1])
 
         go func(nc net.Conn, target string) {
@@ -421,9 +412,10 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
             log(args, "- TCP: %s -> %s (Tx: %s, Rx: %s)\n", nc.RemoteAddr(), target, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
 
           } else {
-            log(args, "! Error: %v\n", err)
+            log(args, "- TCP: %s -> %s (Error: %v)\n", nc.RemoteAddr(), target, err)
           }
         }(c, target[0] + ":" + target[1])
+        connCount += 1
 
       } else {
         break

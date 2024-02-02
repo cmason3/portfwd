@@ -1,7 +1,8 @@
 ## CHANGELOG
 
-#### 1.0.4 - Pending
+#### 1.0.4 - 2nd February 2024
 - Added support for load balancing when `bind_host:listen_port` is duplicated
+- Cosmetic updates to logging - don't output timestamp if running via Systemd
 - Added a 5 second timeout for outbound TCP connections
 
 #### 1.0.3 - 1st February 2024
