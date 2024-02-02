@@ -11,7 +11,7 @@ A simple TCP and UDP based port forwarder which supports concurrent connections 
          -config <portfwd.conf>
 ```
 
-You can specify as many TCP and/or UDP forwarders as you wish on the command line - if you omit `bind_host` then it defaults to `127.0.0.1` - to listen on all IPs use `0.0.0.0`.
+You can specify as many TCP and/or UDP forwarders as you wish on the command line - if you omit `bind_host` then it defaults to `127.0.0.1` - to listen on all IPs use `0.0.0.0`. If you duplicate the `bind_host` and `listen_port` then it will load balance between the destinations (round robin).
 
 You also have the option of specifying multiple TCP and/or UDP forwarders (one per line) within a configuration file, e.g:
 
