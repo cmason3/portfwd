@@ -16,7 +16,6 @@
  */
 
  /*
-  * Format targets with ,
   * round-robin for targets - get rid of hash
   */
 
@@ -255,7 +254,8 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       var wgc sync.WaitGroup
       buf := make([]byte, bufSize)
 
-      log(args, "Creating UDP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], targets)
+      stargets := fmt.Sprintf("[%s]", strings.Join(targets, ", "))
+      log(args, "Creating UDP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], stargets)
 
       wgc.Add(1)
 
@@ -375,7 +375,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       }
       wgc.Wait()
 
-      log(args, "Stopping UDP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], targets)
+      log(args, "Stopping UDP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], stargets)
 
     } else {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -392,7 +392,8 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
     var wgc sync.WaitGroup
     defer s.Close()
 
-    log(args, "Creating TCP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], targets)
+    stargets := fmt.Sprintf("[%s]", strings.Join(targets, ", "))
+    log(args, "Creating TCP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], stargets)
 
     go func(shutdown chan struct{}) {
       <-shutdown
@@ -430,7 +431,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
     }
     wgc.Wait()
 
-    log(args, "Stopping TCP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], targets)
+    log(args, "Stopping TCP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], stargets)
 
   } else {
     fmt.Fprintf(os.Stderr, "Error: %v\n", err)
