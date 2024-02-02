@@ -14,10 +14,13 @@ jobs:
         with:
           go-version: '1.20'
 
-      - run: go version
+      - run: |
+          env GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" portfwd.go
+          tar zcvf portfwd-${{ github.ref }}-linux-amd64.tar.gz portfwd
+          ls -la
 
-#env GOOS=windows GOARCH=amd64 go build xxxx
-# portfwd-1.0.4-linux-amd64.tar.gz
-
-#env GOOS=linux GOARCH=amd64 go build xxx
-# portfwd-v1.0.4-windows-x86_64.zip
+      - run: |
+          env GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" portfwd.go
+          zip portfwd-${{ github.ref }}-windows-x86_64.tar.gz portfwd.exe
+          ls -la
+        
