@@ -199,7 +199,7 @@ func formatBytes(b float64) string {
   return fmt.Sprintf("%s %sB", r, u)
 }
 
-func log(args *Args, f string, a ...interface{}) error {
+func log(args *Args, f string, a ...any) error {
   ts := fmt.Sprintf("[%s] ", time.Now().Format(time.StampMilli))
 
   if len(args.logFile) > 0 {
