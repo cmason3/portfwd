@@ -107,7 +107,6 @@ func main() {
 func parseArgs() (Args, error) {
   var args Args
   args.fwdrs = make(map[string][]string)
-  args.flowStats = make(map[string][2]float64)
 
   rfwdr := regexp.MustCompile(`^(:?(?:[0-9]+\.){3}[0-9]+:)?[0-9]+:(?:[0-9]+\.){3}[0-9]+:[0-9]+$`)
 
