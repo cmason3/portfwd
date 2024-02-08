@@ -31,7 +31,7 @@ import (
   "path/filepath"
 )
 
-var Version = "1.0.4"
+var Version = "1.0.5"
 
 const (
   bufSize = 65535
@@ -40,6 +40,8 @@ const (
 
 type Args struct {
   fwdrs map[string][]string
+  flowStats map[string][2]float64
+  flowStatsMutex sync.RWMutex
   logFile string
   logFileMutex sync.Mutex
   shutdown chan struct{}
@@ -48,7 +50,7 @@ type Args struct {
 type UDPConn struct {
   target string
   dst *net.UDPConn
-  txRxBytes [2]float64
+  // txRxBytes [2]float64
   lastActivity time.Time
 }
 
@@ -106,6 +108,7 @@ func main() {
 func parseArgs() (Args, error) {
   var args Args
   args.fwdrs = make(map[string][]string)
+  args.flowStats = make(map[string][2]float64)
 
   rfwdr := regexp.MustCompile(`^(:?(?:[0-9]+\.){3}[0-9]+:)?[0-9]+:(?:[0-9]+\.){3}[0-9]+:[0-9]+$`)
 
@@ -405,7 +408,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
           if t, err := net.DialTimeout("tcp", target, time.Second * 5); err == nil {
             defer t.Close()
 
-            var txRxBytes [2]float64
+            // var txRxBytes [2]float64
             go forwardTcp(nc, t, &txRxBytes[0])
             forwardTcp(t, nc, &txRxBytes[1])
 
