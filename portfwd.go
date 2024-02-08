@@ -40,8 +40,7 @@ const (
 
 type Args struct {
   fwdrs map[string][]string
-  flowStats map[string][2]float64
-  flowStatsMutex sync.RWMutex
+  stats chan string
   logFile string
   logFileMutex sync.Mutex
   shutdown chan struct{}
