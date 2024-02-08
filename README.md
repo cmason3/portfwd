@@ -51,3 +51,5 @@ systemctl --user enable --now portfwd.service
 
 systemctl --user status portfwd.service
 ```
+
+**Note** There are no guarantees that the `main` branch will compile or work successfully at any given time - only release tags are guaranteed to compile and work.
