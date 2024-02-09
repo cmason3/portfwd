@@ -40,7 +40,7 @@ const (
 
 type Args struct {
   fwdrs map[string][]string
-  stats map[string][2]float64
+  stats map[string]*[2]float64
   statsMutex sync.RWMutex
   logFile string
   logFileMutex sync.Mutex
@@ -108,7 +108,7 @@ func main() {
 func parseArgs() (Args, error) {
   var args Args
   args.fwdrs = make(map[string][]string)
-  args.stats = make(map[string][2]float64)
+  args.stats = make(map[string]*[2]float64)
 
   rfwdr := regexp.MustCompile(`^(:?(?:[0-9]+\.){3}[0-9]+:)?[0-9]+:(?:[0-9]+\.){3}[0-9]+:[0-9]+$`)
 
@@ -330,6 +330,10 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
                 udpConnsMutex.Lock()
                 udpConns[addr.String()] = u
                 udpConnsMutex.Unlock()
+
+                args.statsMutex.Lock()
+                args.stats[key] = &[...]float64{0, 0}
+                args.statsMutex.Unlock()
   
                 wgc.Add(1)
   
@@ -345,7 +349,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
                       udpConnsMutex.Unlock()
 
                       args.statsMutex.Lock()
-                      // args.stats[key][1] += float64(n)
+                      args.stats[key][1] += float64(n)
                       args.statsMutex.Unlock()
 
                     } else {
@@ -372,7 +376,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
             udpConnsMutex.Unlock()
 
             args.statsMutex.Lock()
-            // args.stats[key][0] += float64(n)
+            args.stats[key][0] += float64(n)
             args.statsMutex.Unlock()
           }
           connCount += 1
@@ -423,6 +427,10 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
           if t, err := net.DialTimeout("tcp", target, time.Second * 5); err == nil {
             defer t.Close()
 
+            args.statsMutex.Lock()
+            args.stats[key] = &[...]float64{0, 0}
+            args.statsMutex.Unlock()
+
             go forwardTcp(nc, t, key, 0, args)
             forwardTcp(t, nc, key, 1, args)
 
@@ -462,7 +470,7 @@ func forwardTcp(src net.Conn, dst net.Conn, key string, dir int, args *Args) {
       w.Flush()
 
       args.statsMutex.Lock()
-      // args.stats[key][dir] += float64(n)
+      args.stats[key][dir] += float64(n)
       args.statsMutex.Unlock()
 
     } else {
