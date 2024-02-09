@@ -400,8 +400,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
           defer wgc.Done()
           defer nc.Close()
 
-          key := fmt.Sprintf("TCP: %s -> %s", c.RemoteAddr(), target)
-          log(args, "+ %s\n", key)
+          log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), target)
 
           if t, err := net.DialTimeout("tcp", target, time.Second * 5); err == nil {
             defer t.Close()
@@ -410,10 +409,10 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
             go forwardTcp(nc, t, &txRxBytes[0])
             forwardTcp(t, nc, &txRxBytes[1])
 
-            log(args, "- %s (Tx: %s, Rx: %s)\n", key, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
+            log(args, "- TCP: %s -> %s (Tx: %s, Rx: %s)\n", c.RemoteAddr(), target, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
 
           } else {
-            log(args, "- %s (Error: %v)\n", key, err)
+            log(args, "- TCP: %s -> %s (Error: %v)\n", c.RemoteAddr(), target, err)
           }
         }(c, targets[connCount % len(targets)], args)
         connCount += 1

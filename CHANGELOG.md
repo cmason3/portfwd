@@ -1,7 +1,7 @@
 ## CHANGELOG
 
 #### 1.0.5 - In Development
-- Update how per flow stats are recorded using a centralised map
+- Various code cleanups to make the code easier to read
 
 #### 1.0.4 - 2nd February 2024
 - Added support for load balancing when `bind_host` and `listen_port` are duplicated
