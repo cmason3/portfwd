@@ -41,7 +41,7 @@ const (
 type Args struct {
   fwdrs map[string][]string
   stats map[string]*[2]float64
-  statsMutex sync.Mutex
+  statsMutex sync.RWMutex
   logFile string
   logFileMutex sync.Mutex
   shutdown chan struct{}
@@ -332,12 +332,13 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
                 udpConnsMutex.Unlock()
 
                 args.statsMutex.Lock()
-                args.stats[key] = &[...]float64{0, 0}
+                txRxBytes := &[...]float64{0, 0}
+                args.stats[key] = txRxBytes
                 args.statsMutex.Unlock()
-  
+
                 wgc.Add(1)
   
-                go func(u *UDPConn, s *net.UDPConn, addr *net.UDPAddr, key string, args *Args) {
+                go func(u *UDPConn, s *net.UDPConn, addr *net.UDPAddr, txRxBytes *float64) {
                   defer wgc.Done()
                   buf := make([]byte, bufSize)
                   
@@ -348,15 +349,13 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
                       u.lastActivity = time.Now()
                       udpConnsMutex.Unlock()
 
-                      args.statsMutex.Lock()
-                      args.stats[key][1] += float64(n) // FIXME: BAD
-                      args.statsMutex.Unlock()
+                      *txRxBytes += float64(n)
 
                     } else {
                       break
                     }
                   }
-                }(u, s, addr.(*net.UDPAddr), key, args)
+                }(u, s, addr.(*net.UDPAddr), &txRxBytes[1])
                 ok = true
   
               } else {
@@ -375,9 +374,9 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
             u.lastActivity = time.Now()
             udpConnsMutex.Unlock()
 
-            args.statsMutex.Lock()
-            args.stats[key][0] += float64(n) // FIXME: BAD
-            args.statsMutex.Unlock()
+            args.statsMutex.RLock()
+            args.stats[key][0] += float64(n)
+            args.statsMutex.RUnlock()
           }
           connCount += 1
 
@@ -428,11 +427,12 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
             defer t.Close()
 
             args.statsMutex.Lock()
-            args.stats[key] = &[...]float64{0, 0}
+            txRxBytes := &[...]float64{0, 0}
+            args.stats[key] = txRxBytes
             args.statsMutex.Unlock()
 
-            go forwardTcp(nc, t, key, 0, args)
-            forwardTcp(t, nc, key, 1, args)
+            go forwardTcp(nc, t,  &txRxBytes[0])
+            forwardTcp(t, nc, &txRxBytes[1])
 
             args.statsMutex.Lock()
             log(args, "- %s (Tx: %s, Rx: %s)\n", key, formatBytes(args.stats[key][0]), formatBytes(args.stats[key][1]))
@@ -458,7 +458,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
   }
 }
 
-func forwardTcp(src net.Conn, dst net.Conn, key string, dir int, args *Args) {
+func forwardTcp(src net.Conn, dst net.Conn, txRxBytes *float64) {
   r := bufio.NewReader(src)
   w := bufio.NewWriter(dst)
 
@@ -469,9 +469,7 @@ func forwardTcp(src net.Conn, dst net.Conn, key string, dir int, args *Args) {
       w.Write(buf[:n])
       w.Flush()
 
-      args.statsMutex.Lock()
-      args.stats[key][dir] += float64(n) // FIXME: BAD
-      args.statsMutex.Unlock()
+      *txRxBytes += float64(n)
 
     } else {
       dst.Close()
