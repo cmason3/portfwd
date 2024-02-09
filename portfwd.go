@@ -41,7 +41,7 @@ const (
 type Args struct {
   fwdrs map[string][]string
   stats map[string]*[2]float64
-  statsMutex sync.RWMutex
+  statsMutex sync.Mutex
   logFile string
   logFileMutex sync.Mutex
   shutdown chan struct{}
@@ -349,7 +349,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
                       udpConnsMutex.Unlock()
 
                       args.statsMutex.Lock()
-                      args.stats[key][1] += float64(n)
+                      args.stats[key][1] += float64(n) // FIXME: BAD
                       args.statsMutex.Unlock()
 
                     } else {
@@ -376,7 +376,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
             udpConnsMutex.Unlock()
 
             args.statsMutex.Lock()
-            args.stats[key][0] += float64(n)
+            args.stats[key][0] += float64(n) // FIXME: BAD
             args.statsMutex.Unlock()
           }
           connCount += 1
@@ -470,7 +470,7 @@ func forwardTcp(src net.Conn, dst net.Conn, key string, dir int, args *Args) {
       w.Flush()
 
       args.statsMutex.Lock()
-      args.stats[key][dir] += float64(n)
+      args.stats[key][dir] += float64(n) // FIXME: BAD
       args.statsMutex.Unlock()
 
     } else {
