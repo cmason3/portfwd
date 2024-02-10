@@ -396,9 +396,9 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       if c, err := s.Accept(); err == nil {
         wgc.Add(1)
 
-        go func(nc net.Conn, target string, args *Args) {
+        go func(c net.Conn, target string, args *Args) {
           defer wgc.Done()
-          defer nc.Close()
+          defer c.Close()
 
           log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), target)
 
@@ -406,8 +406,8 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
             defer t.Close()
 
             var txRxBytes [2]float64
-            go forwardTcp(nc, t, &txRxBytes[0])
-            forwardTcp(t, nc, &txRxBytes[1])
+            go forwardTcp(c, t, &txRxBytes[0])
+            forwardTcp(t, c, &txRxBytes[1])
 
             log(args, "- TCP: %s -> %s (Tx: %s, Rx: %s)\n", c.RemoteAddr(), target, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
 
