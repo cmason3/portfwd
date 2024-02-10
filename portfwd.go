@@ -15,6 +15,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+// CHECK PASSING EVERY COMBINATION of -u -ud -udp, etc
+
 package main
 
 import (
@@ -71,14 +73,13 @@ func main() {
 
     var wgf sync.WaitGroup
     for fwdr, targets := range args.fwdrs {
-      switch efwdr := strings.Split(fwdr, ":"); efwdr[0] {
-        case "t":
-          wgf.Add(1)
-          go tcpForwarder(efwdr[1:], targets, &wgf, &args)
+      if strings.HasPrefix(fwdr, "t:") {
+        wgf.Add(1)
+        go tcpForwarder(fwdr[2:], targets, &wgf, &args)
 
-        case "u":
-          wgf.Add(1)
-          go udpForwarder(efwdr[1:], targets, &wgf, &args)
+      } else if strings.HasPrefix(fwdr, "u:") {
+        wgf.Add(1)
+        go udpForwarder(fwdr[2:], targets, &wgf, &args)
       }
     }
     wgf.Wait()
@@ -228,13 +229,13 @@ func log(args *Args, f string, a ...any) error {
   return nil
 }
 
-func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Args) {
+func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
   defer wgf.Done()
 
   var udpConnsMutex sync.RWMutex
   udpConns := make(map[string]*UDPConn)
 
-  if udpAddr, err := net.ResolveUDPAddr("udp", fwdr[0] + ":" + fwdr[1]); err == nil {
+  if udpAddr, err := net.ResolveUDPAddr("udp", fwdr); err == nil {
     if s, err := net.ListenUDP("udp", udpAddr); err == nil {
       defer s.Close()
 
@@ -243,7 +244,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       buf := make([]byte, bufSize)
 
       stargets := fmt.Sprintf("[%s]", strings.Join(targets, ", "))
-      log(args, "Creating UDP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], stargets)
+      log(args, "Creating UDP Forwarder: %s -> %s...\n", fwdr, stargets)
 
       wgc.Add(1)
 
@@ -366,7 +367,7 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
       }
       wgc.Wait()
 
-      log(args, "Stopping UDP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], stargets)
+      log(args, "Stopping UDP Forwarder: %s -> %s...\n", fwdr, stargets)
 
     } else {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -376,16 +377,16 @@ func udpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
   }
 }
 
-func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Args) {
+func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
   defer wgf.Done()
 
-  if s, err := net.Listen("tcp", fwdr[0] + ":" + fwdr[1]); err == nil {
+  if s, err := net.Listen("tcp", fwdr); err == nil {
     var connCount int
     var wgc sync.WaitGroup
     defer s.Close()
 
     stargets := fmt.Sprintf("[%s]", strings.Join(targets, ", "))
-    log(args, "Creating TCP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], stargets)
+    log(args, "Creating TCP Forwarder: %s -> %s...\n", fwdr, stargets)
 
     go func(shutdown chan struct{}) {
       <-shutdown
@@ -423,7 +424,7 @@ func tcpForwarder(fwdr []string, targets []string, wgf *sync.WaitGroup, args *Ar
     }
     wgc.Wait()
 
-    log(args, "Stopping TCP Forwarder: %s -> %s...\n", fwdr[0] + ":" + fwdr[1], stargets)
+    log(args, "Stopping TCP Forwarder: %s -> %s...\n", fwdr, stargets)
 
   } else {
     fmt.Fprintf(os.Stderr, "Error: %v\n", err)
