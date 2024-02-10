@@ -15,8 +15,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-// CHECK PASSING EVERY COMBINATION of -u -ud -udp, etc
-
 package main
 
 import (
