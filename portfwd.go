@@ -40,9 +40,9 @@ const (
 
 type Args struct {
   fwdrs map[string][]string
-  logFile string
-  logFileMutex sync.Mutex
   shutdown chan struct{}
+  logFileMutex sync.Mutex
+  logFile string
 }
 
 type UDPConn struct {
