@@ -1,6 +1,6 @@
 ## CHANGELOG
 
-#### 1.0.5 - In Development
+#### 1.0.5 - 12th February 2024
 - Various code cleanups to make the code easier to read and more efficient
 
 #### 1.0.4 - 2nd February 2024
