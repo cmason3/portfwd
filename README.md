@@ -28,28 +28,26 @@ If you want to background the process and log the connections to a file then you
 portfwd <arguments> -logfile <portfwd.log> &
 ```
 
-Alternatively you can run it via Systemd using the following commands as a regular user (assuming you aren't trying to bind to priviledged ports):
+Alternatively you can run it as a system service via Systemd using the following commands:
 
 ```
-mkdir -p ~/.config/systemd/user
-
-cat >~/.config/systemd/user/portfwd.service <<EOF
+cat <<EOF | sudo tee /etc/systemd/system/portfwd.service 1>/dev/null
 [Unit]
 Description=TCP/UDP Port Forwarder
 
 [Service]
-ExecStart=${HOME}/bin/portfwd -conf ${HOME}/conf/portfwd.conf
+ExecStart=/usr/local/bin/portfwd -conf /etc/portfwd.conf
 Restart=on-success
 
 [Install]
 WantedBy=default.target
 EOF
 
-systemctl --user daemon-reload
+sudo systemctl daemon-reload
 
-systemctl --user enable --now portfwd.service
+sudo systemctl enable --now portfwd.service
 
-systemctl --user status portfwd.service
+sudo systemctl status portfwd.service
 ```
 
 **Note** There are no guarantees the code in any branch will compile or work successfully at any given time - only release tags are guaranteed to compile and work.
