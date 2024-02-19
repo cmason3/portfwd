@@ -9,9 +9,10 @@ A simple TCP and UDP based port forwarder which supports concurrent connections 
          -udp [bind_host:]<listen_port>:<remote_host>:<remote_port>
          -logfile <portfwd.log>
          -config <portfwd.conf>
+         -fault-tolerant
 ```
 
-You can specify as many TCP and/or UDP forwarders as you wish on the command line - if you omit `bind_host` then it defaults to `127.0.0.1` - to listen on all IPs use `0.0.0.0`. If you duplicate `bind_host` and `listen_port` then it will load balance between the destinations (round robin).
+You can specify as many TCP and/or UDP forwarders as you wish on the command line - if you omit `bind_host` then it defaults to `127.0.0.1` - to listen on all IPs use `0.0.0.0`. If you duplicate `bind_host` and `listen_port` then it will load balance between the destinations (round-robin by default). For TCP connections instead of round-robin load balancing you can specify `-fault-tolerant`, which will keep using the same destination until it fails and will then move to the next.
 
 You also have the option of specifying multiple TCP and/or UDP forwarders (one per line) within a configuration file, e.g:
 
