@@ -98,7 +98,7 @@ func main() {
       fmt.Fprintf(os.Stderr, "               -udp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
       fmt.Fprintf(os.Stderr, "               -logfile <portfwd.log>\n")
       fmt.Fprintf(os.Stderr, "               -config <portfwd.conf>\n")
-      fmt.Fprintf(os.Stderr, "               -fault-tolerant\n")
+      fmt.Fprintf(os.Stderr, "               -ft-tcp\n")
     }
     os.Exit(1)
   }
@@ -166,7 +166,7 @@ func parseArgs() (Args, error) {
       } else {
         return args, fmt.Errorf("invalid argument: %s", os.Args[i])
       }
-    } else if smatch(os.Args[i], "-fault-tolerant", 2) {
+    } else if smatch(os.Args[i], "-ft-tcp", 2) {
       args.mode = "FT"
 
     } else {
@@ -333,7 +333,7 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                   defer wgc.Done()
                   buf := make([]byte, bufSize)
 
-                  for { 
+                  for {
                     if n, _, err := u.dst.ReadFrom(buf); err == nil {
                       s.WriteToUDP(buf[:n], addr)
                       udpConnsMutex.Lock()
@@ -434,7 +434,7 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
             if args.mode == "FT" {
               targetMutex.Lock()
               for i, t := range targets {
-                if t == target {
+                if (t == target) && (i != (len(targets) - 1)) {
                   copy(targets[i:], targets[i + 1:])
                   targets[len(targets) - 1] = t
                   break
