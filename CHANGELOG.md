@@ -1,5 +1,8 @@
 ## CHANGELOG
 
+#### 1.0.6 - 19th February 2024
+- Add support for fault tolerant TCP load balancing
+
 #### 1.0.5 - 12th February 2024
 - Various code cleanups to make the code easier to read and more efficient
 
