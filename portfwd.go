@@ -31,7 +31,7 @@ import (
   "path/filepath"
 )
 
-var Version = "1.0.6"
+var Version = "1.0.7"
 
 const (
   bufSize = 65535
@@ -109,7 +109,8 @@ func parseArgs() (Args, error) {
   args.fwdrs = make(map[string][]string)
   args.mode = "RR"
 
-  rfwdr := regexp.MustCompile(`^(:?(?:[0-9]+\.){3}[0-9]+:)?[0-9]+:(?:[0-9]+\.){3}[0-9]+:[0-9]+$`)
+  // rfwdr := regexp.MustCompile(`^(:?(?:[0-9]+\.){3}[0-9]+:)?[0-9]+:(?:[0-9]+\.){3}[0-9]+:[0-9]+$`)
+  rfwdr := regexp.MustCompile(`^(:?\S+:)?[0-9]+:\S+:[0-9]+$`)
 
   for i := 1; i < len(os.Args); i++ {
     if smatch(os.Args[i], "-tcp", 2) || smatch(os.Args[i], "-udp", 2) || smatch(os.Args[i], "-config", 2) || smatch(os.Args[i], "-logfile", 2) {
@@ -313,9 +314,10 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 
           if !ok {
             target := targets[connCount % len(targets)]
-            log(args, "+ UDP: %s -> %s\n", addr, target)
 
             if t, err := net.ResolveUDPAddr("udp", target); err == nil {
+              log(args, "+ UDP: %s -> %s\n", addr, t)
+
               if c, err := net.DialUDP("udp", nil, t); err == nil {
                 u = &UDPConn {
                   dst: c,
@@ -349,9 +351,10 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                 ok = true
 
               } else {
-                log(args, "- UDP: %s -> %s (Error: %v)\n", addr, target, err)
+                log(args, "- UDP: %s -> %s (Error: %v)\n", addr, t, err)
               }
             } else {
+              log(args, "+ UDP: %s -> %s\n", addr, target)
               log(args, "- UDP: %s -> %s (Error: %v)\n", addr, target, err)
             }
           }
@@ -384,52 +387,60 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
   defer wgf.Done()
 
-  if s, err := net.Listen("tcp", fwdr); err == nil {
-    var wgc sync.WaitGroup
-    var targetMutex sync.Mutex
-    var connCount int
-    defer s.Close()
+  if tcpAddr, err := net.ResolveTCPAddr("tcp", fwdr); err == nil {
+    if s, err := net.ListenTCP("tcp", tcpAddr); err == nil {
+      var wgc sync.WaitGroup
+      var targetMutex sync.Mutex
+      var connCount int
+      defer s.Close()
 
-    stargets := fmt.Sprintf("[%s]", strings.Join(targets, ", "))
-    log(args, "Creating TCP Forwarder: %s -> %s:%s...\n", fwdr, args.mode, stargets)
+      stargets := fmt.Sprintf("[%s]", strings.Join(targets, ", "))
+      log(args, "Creating TCP Forwarder: %s -> %s:%s...\n", fwdr, args.mode, stargets)
 
-    go func(shutdown chan struct{}) {
-      <-shutdown
-      s.Close()
-    }(args.shutdown)
+      go func(shutdown chan struct{}) {
+        <-shutdown
+        s.Close()
+      }(args.shutdown)
 
-    for {
-      if c, err := s.Accept(); err == nil {
-        var target string
+      for {
+        if c, err := s.Accept(); err == nil {
+          var target string
 
-        if args.mode == "RR" {
-          target = targets[connCount % len(targets)]
+          if args.mode == "RR" {
+            target = targets[connCount % len(targets)]
 
-        } else if args.mode == "FT" {
-          targetMutex.Lock()
-          target = targets[0]
-          targetMutex.Unlock()
-        }
+          } else if args.mode == "FT" {
+            targetMutex.Lock()
+            target = targets[0]
+            targetMutex.Unlock()
+          }
 
-        wgc.Add(1)
+          wgc.Add(1)
 
-        go func(c net.Conn, target string, args *Args, targetMutex *sync.Mutex) {
-          defer wgc.Done()
-          defer c.Close()
+          go func(c net.Conn, target string, args *Args, targetMutex *sync.Mutex) {
+            defer wgc.Done()
+            defer c.Close()
 
-          log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), target)
+            if tcpAddr, err := net.ResolveTCPAddr("tcp", target); err == nil {
+              log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), tcpAddr)
 
-          if t, err := net.DialTimeout("tcp", target, time.Second * 5); err == nil {
-            defer t.Close()
+              if t, err := net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), time.Second * 5); err == nil {
+                defer t.Close()
 
-            var txRxBytes [2]float64
-            go forwardTcp(c, t, &txRxBytes[0])
-            forwardTcp(t, c, &txRxBytes[1])
+                var txRxBytes [2]float64
+                go forwardTcp(c, t, &txRxBytes[0])
+                forwardTcp(t, c, &txRxBytes[1])
 
-            log(args, "- TCP: %s -> %s (Tx: %s, Rx: %s)\n", c.RemoteAddr(), target, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
+                log(args, "- TCP: %s -> %s (Tx: %s, Rx: %s)\n", c.RemoteAddr(), tcpAddr, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
+                return
 
-          } else {
-            log(args, "- TCP: %s -> %s (Error: %v)\n", c.RemoteAddr(), target, err)
+              } else {
+                log(args, "- TCP: %s -> %s (Error: %v)\n", c.RemoteAddr(), tcpAddr, err)
+              }
+            } else {
+              log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), target)
+              log(args, "- TCP: %s -> %s (Error: %v)\n", c.RemoteAddr(), target, err)
+            }
 
             if args.mode == "FT" {
               targetMutex.Lock()
@@ -442,18 +453,20 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
               }
               targetMutex.Unlock()
             }
-          }
-        }(c, target, args, &targetMutex)
-        connCount += 1
+          }(c, target, args, &targetMutex)
+          connCount += 1
 
-      } else {
-        break
+        } else {
+          break
+        }
       }
+      wgc.Wait()
+
+      log(args, "Stopping TCP Forwarder: %s -> %s:%s...\n", fwdr, args.mode, stargets)
+
+    } else {
+      fmt.Fprintf(os.Stderr, "Error: %v\n", err)
     }
-    wgc.Wait()
-
-    log(args, "Stopping TCP Forwarder: %s -> %s:%s...\n", fwdr, args.mode, stargets)
-
   } else {
     fmt.Fprintf(os.Stderr, "Error: %v\n", err)
   }

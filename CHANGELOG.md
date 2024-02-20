@@ -1,5 +1,8 @@
 ## CHANGELOG
 
+#### 1.0.7 - In Development
+- Add support for forwarders based on IPv6 or DNS hostnames
+
 #### 1.0.6 - 19th February 2024
 - Add support for fault tolerant TCP load balancing
 
