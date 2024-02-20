@@ -109,8 +109,7 @@ func parseArgs() (Args, error) {
   args.fwdrs = make(map[string][]string)
   args.mode = "RR"
 
-  // rfwdr := regexp.MustCompile(`^(:?(?:[0-9]+\.){3}[0-9]+:)?[0-9]+:(?:[0-9]+\.){3}[0-9]+:[0-9]+$`)
-  rfwdr := regexp.MustCompile(`^(:?\S+:)?[0-9]+:\S+:[0-9]+$`)
+  rfwdr := regexp.MustCompile(`(?i)^(?:(\[[0-9A-F:.]+\]|[^\s:]+):)?([0-9]+):(\[[0-9A-F:.]+\]|[^\s:]+):([0-9]+)$`)
 
   for i := 1; i < len(os.Args); i++ {
     if smatch(os.Args[i], "-tcp", 2) || smatch(os.Args[i], "-udp", 2) || smatch(os.Args[i], "-config", 2) || smatch(os.Args[i], "-logfile", 2) {
@@ -148,14 +147,12 @@ func parseArgs() (Args, error) {
           }
         } else {
           for _, fwdr := range strings.Split(os.Args[i + 1], ",") {
-            if rfwdr.MatchString(fwdr) {
-              if strings.Count(fwdr, ":") == 2 {
-                fwdr = "127.0.0.1:" + fwdr
+            if m := rfwdr.FindStringSubmatch(fwdr); len(m) == 5 {
+              if len(m[1]) == 0 {
+                m[1] = "localhost"
               }
-
-              efwdr := strings.Split(fwdr, ":")
-              mkey := os.Args[i][1:2] + ":" + strings.Join(efwdr[:2], ":")
-              args.fwdrs[mkey] = append(args.fwdrs[mkey], strings.Join(efwdr[2:], ":"))
+              mkey := os.Args[i][1:2] + ":" + strings.Join(m[1:3], ":")
+              args.fwdrs[mkey] = append(args.fwdrs[mkey], strings.Join(m[3:], ":"))
 
             } else {
               return args, fmt.Errorf("invalid forwarder: %s", fwdr)
