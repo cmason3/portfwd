@@ -29,8 +29,10 @@ import (
   "syscall"
   "os/signal"
   "path/filepath"
-
+  "crypto/cipher"
+  "encoding/binary"
   "filippo.io/mlkem768/xwing"
+  "golang.org/x/crypto/chacha20poly1305"
 )
 
 var Version = "1.1.0"
@@ -58,8 +60,8 @@ type UDPConn struct {
 type CryptoKeys struct {
   public []byte
   private []byte
-  encKeys [2][]byte
-  decKeys [2][]byte
+  encrypt [2]cipher.AEAD
+  decrypt [2]cipher.AEAD
 }
 
 func main() {
@@ -103,7 +105,7 @@ func main() {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 
     } else {
-      fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
+      fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [bind_host:]<listen_port>[s]:<remote_host>:<remote_port>[s]\n")
       fmt.Fprintf(os.Stderr, "               -udp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
       fmt.Fprintf(os.Stderr, "               -logfile <portfwd.log>\n")
       fmt.Fprintf(os.Stderr, "               -config <portfwd.conf>\n")
@@ -445,17 +447,18 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                   var err error
 
                   if cryptoKeys.public, cryptoKeys.private, err = xwing.GenerateKey(); err == nil {
+                    hdr := []byte{0x01, 0x00, 0x00}
+                    binary.BigEndian.PutUint16(hdr[1:], uint16(len(cryptoKeys.public)))
+
                     if srcStun {
-                      fmt.Printf("Source is tunnel\n")
                       sw := bufio.NewWriter(c)
-                      sw.Write(append([]byte{0x01}, cryptoKeys.public...))
+                      sw.Write(append(hdr, cryptoKeys.public...))
                       sw.Flush()
                       todo.Add(1)
                     }
                     if dstStun {
-                      fmt.Printf("Destination is tunnel\n")
                       dw := bufio.NewWriter(t)
-                      dw.Write(append([]byte{0x01}, cryptoKeys.public...))
+                      dw.Write(append(hdr, cryptoKeys.public...))
                       dw.Flush()
                       todo.Add(1)
                     }
@@ -512,23 +515,49 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 
 func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKeys *CryptoKeys, keyId int, todo *sync.WaitGroup, txRxBytes *float64, args *Args) {
   var pktSeqNum uint64
+  var rbuf []byte
 
   sr := bufio.NewReader(src)
   dw := bufio.NewWriter(dst)
   kemRequired := srcStun
 
   buf := make([]byte, bufSize)
+  nonce := make([]byte, chacha20poly1305.NonceSize)
 
   for {
     if n, err := sr.Read(buf); err == nil {
+      if srcStun {
+        rbuf = append(rbuf, buf[:n]...)
+
+        if rbuf[0] == 0x01 {
+          if len(rbuf) > 3 {
+            n = int(binary.BigEndian.Uint16(rbuf[1:3]))
+
+            if len(rbuf) >= (n + 3) {
+              buf = rbuf[3:n + 3]
+              rbuf = rbuf[n + 3:]
+
+            } else {
+              continue
+            }
+          } else {
+            continue
+          }
+        } else {
+          log(args, "! TCP: %s -> %s (Error: portfwd: unknown version)\n", src.RemoteAddr(), dst.RemoteAddr())
+          src.Close()
+          break
+        }
+      }
       if kemRequired {
         if pktSeqNum == 0 {
-          if buf[0] == 0x01 {
-            if ciphertext, skey, err := xwing.Encapsulate(buf[1:n]); err == nil {
-              cryptoKeys.encKeys[keyId] = skey
-              fmt.Printf("Encryption Key: %x\n", cryptoKeys.encKeys[keyId])
+          if ciphertext, skey, err := xwing.Encapsulate(buf[:n]); err == nil {
+            var err error
+            if cryptoKeys.encrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
               sw := bufio.NewWriter(src)
-              sw.Write(ciphertext)
+              hdr := []byte{0x01, 0x00, 0x00}
+              binary.BigEndian.PutUint16(hdr[1:], uint16(len(ciphertext)))
+              sw.Write(append(hdr, ciphertext...))
               sw.Flush()
 
             } else {
@@ -537,19 +566,24 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
               break
             }
           } else {
-            log(args, "! TCP: %s -> %s (Error: unknown version)\n", src.RemoteAddr(), dst.RemoteAddr())
+            log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
             src.Close()
             break
           }
         } else if pktSeqNum == 1 {
           if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
-            cryptoKeys.decKeys[keyId] = skey
-            fmt.Printf("Decryption Key: %x\n", cryptoKeys.decKeys[keyId])
-            kemRequired = false
-            pktSeqNum = 0
-            todo.Done()
-            continue
+            var err error
+            if cryptoKeys.decrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
+              kemRequired = false
+              pktSeqNum = 0
+              todo.Done()
+              continue
 
+            } else {
+              log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+              src.Close()
+              break
+            }
           } else {
             log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
             src.Close()
@@ -560,13 +594,28 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
         todo.Wait()
 
         if srcStun {
-          fmt.Printf("Decrypt (nonce is %d) using %x\n", pktSeqNum, cryptoKeys.decKeys[keyId])
-        }
-        if dstStun {
-          fmt.Printf("Encrypt (nonce is %d) using %x\n", pktSeqNum, cryptoKeys.encKeys[keyId ^ 1])
+          var err error
+          binary.BigEndian.PutUint64(nonce, pktSeqNum)
+          if buf, err = cryptoKeys.decrypt[keyId].Open(buf[:0], nonce, buf[:n], nil); err == nil {
+            n -= chacha20poly1305.Overhead
+
+          } else {
+            log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+            src.Close()
+            break
+          }
         }
 
-        dw.Write(buf[:n])
+        if dstStun {
+          hdr := []byte{0x01, 0x00, 0x00}
+          binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
+          binary.BigEndian.PutUint64(nonce, pktSeqNum)
+          buf = cryptoKeys.encrypt[keyId ^ 1].Seal(buf[:0], nonce, buf[:n], nil)
+          dw.Write(append(hdr, buf[:n + chacha20poly1305.Overhead]...))
+
+        } else {
+          dw.Write(buf[:n])
+        }
         dw.Flush()
 
         *txRxBytes += float64(n)
