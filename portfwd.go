@@ -522,7 +522,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
   kemRequired := srcStun
 
   buf := make([]byte, bufSize)
-  nonce := make([]byte, chacha20poly1305.NonceSize)
+  // nonce := make([]byte, chacha20poly1305.NonceSize)
 
   for {
     if n, err := sr.Read(buf); err == nil {
@@ -537,10 +537,14 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
               buf = rbuf[3:n + 3]
               rbuf = rbuf[n + 3:]
 
+              fmt.Printf("[%d] Rx Length is %d\n", keyId, n)
+
             } else {
+              fmt.Printf("[%d] Not Enough\n", keyId)
               continue
             }
           } else {
+            fmt.Printf("[%d] Not Enough\n", keyId)
             continue
           }
         } else {
@@ -593,6 +597,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
       } else {
         todo.Wait()
 
+        /*
         if srcStun {
           var err error
           binary.BigEndian.PutUint64(nonce, pktSeqNum)
@@ -605,13 +610,16 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
             break
           }
         }
+        */
 
         if dstStun {
           hdr := []byte{0x01, 0x00, 0x00}
-          binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
-          binary.BigEndian.PutUint64(nonce, pktSeqNum)
-          buf = cryptoKeys.encrypt[keyId ^ 1].Seal(buf[:0], nonce, buf[:n], nil)
-          dw.Write(append(hdr, buf[:n + chacha20poly1305.Overhead]...))
+          binary.BigEndian.PutUint16(hdr[1:], uint16(n))
+          // binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
+          //binary.BigEndian.PutUint64(nonce, pktSeqNum)
+          //buf = cryptoKeys.encrypt[keyId ^ 1].Seal(buf[:0], nonce, buf[:n], nil)
+          dw.Write(append(hdr, buf[:n]...))
+          //dw.Write(append(hdr, buf[:n + chacha20poly1305.Overhead]...))
 
         } else {
           dw.Write(buf[:n])
