@@ -1,5 +1,8 @@
 ## CHANGELOG
 
+#### 1.1.0 - In Development
+- Add support for ChaCha20-Poly1305 encrypted TCP tunnels with ECDH key exchange
+
 #### 1.0.7 - 20th February 2024
 - Add support for forwarders based on IPv6 or DNS hostnames
 

@@ -29,9 +29,11 @@ import (
   "syscall"
   "os/signal"
   "path/filepath"
+
+  "filippo.io/mlkem768/xwing"
 )
 
-var Version = "1.0.7"
+var Version = "1.1.0"
 
 const (
   bufSize = 65535
@@ -51,6 +53,13 @@ type UDPConn struct {
   dst *net.UDPConn
   txRxBytes [2]float64
   lastActivity time.Time
+}
+
+type CryptoKeys struct {
+  public []byte
+  private []byte
+  encKeys [2][]byte
+  decKeys [2][]byte
 }
 
 func main() {
@@ -109,7 +118,7 @@ func parseArgs() (Args, error) {
   args.fwdrs = make(map[string][]string)
   args.mode = "RR"
 
-  rfwdr := regexp.MustCompile(`(?i)^(?:(\[[0-9A-F:.]+\]|[^\s:]+):)?([0-9]+):(\[[0-9A-F:.]+\]|[^\s:]+):([0-9]+)$`)
+  rfwdr := regexp.MustCompile(`(?i)^(?:(\[[0-9A-F:.]+\]|[^\s:]+):)?([0-9]+s?):(\[[0-9A-F:.]+\]|[^\s:]+):([0-9]+s?)$`)
 
   for i := 1; i < len(os.Args); i++ {
     if smatch(os.Args[i], "-tcp", 2) || smatch(os.Args[i], "-udp", 2) || smatch(os.Args[i], "-config", 2) || smatch(os.Args[i], "-logfile", 2) {
@@ -384,7 +393,9 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
   defer wgf.Done()
 
-  if tcpAddr, err := net.ResolveTCPAddr("tcp", fwdr); err == nil {
+  srcStun := strings.HasSuffix(fwdr, "s")
+
+  if tcpAddr, err := net.ResolveTCPAddr("tcp", strings.TrimSuffix(fwdr, "s")); err == nil {
     if s, err := net.ListenTCP("tcp", tcpAddr); err == nil {
       var wgc sync.WaitGroup
       var targetMutex sync.Mutex
@@ -414,19 +425,49 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 
           wgc.Add(1)
 
-          go func(c net.Conn, target string, args *Args, targetMutex *sync.Mutex) {
+          go func(c net.Conn, target string, args *Args, targetMutex *sync.Mutex, srcStun bool) {
             defer wgc.Done()
             defer c.Close()
+
+            dstStun := strings.HasSuffix(target, "s")
+            target = strings.TrimSuffix(target, "s")
 
             if tcpAddr, err := net.ResolveTCPAddr("tcp", target); err == nil {
               log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), tcpAddr)
 
               if t, err := net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), time.Second * 5); err == nil {
+                var cryptoKeys CryptoKeys
+                var todo sync.WaitGroup
+
                 defer t.Close()
 
+                if srcStun || dstStun {
+                  var err error
+
+                  if cryptoKeys.public, cryptoKeys.private, err = xwing.GenerateKey(); err == nil {
+                    if srcStun {
+                      fmt.Printf("Source is tunnel\n")
+                      sw := bufio.NewWriter(c)
+                      sw.Write(cryptoKeys.public)
+                      sw.Flush()
+                      todo.Add(1)
+                    }
+                    if dstStun {
+                      fmt.Printf("Destination is tunnel\n")
+                      dw := bufio.NewWriter(t)
+                      dw.Write(cryptoKeys.public)
+                      dw.Flush()
+                      todo.Add(1)
+                    }
+                  } else {
+                    log(args, "- TCP: %s -> %s (Error: %v)\n", c.RemoteAddr(), tcpAddr, err)
+                    return
+                  }
+                }
+
                 var txRxBytes [2]float64
-                go forwardTcp(c, t, &txRxBytes[0])
-                forwardTcp(t, c, &txRxBytes[1])
+                go forwardTcp(c, t, srcStun, dstStun, &cryptoKeys, 0, &todo, &txRxBytes[0], args)
+                forwardTcp(t, c, dstStun, srcStun, &cryptoKeys, 1, &todo, &txRxBytes[1], args)
 
                 log(args, "- TCP: %s -> %s (Tx: %s, Rx: %s)\n", c.RemoteAddr(), tcpAddr, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
                 return
@@ -450,7 +491,7 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
               }
               targetMutex.Unlock()
             }
-          }(c, target, args, &targetMutex)
+          }(c, target, args, &targetMutex, srcStun)
           connCount += 1
 
         } else {
@@ -469,22 +510,60 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
   }
 }
 
-func forwardTcp(src net.Conn, dst net.Conn, txRxBytes *float64) {
-  r := bufio.NewReader(src)
-  w := bufio.NewWriter(dst)
+func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKeys *CryptoKeys, keyId int, todo *sync.WaitGroup, txRxBytes *float64, args *Args) {
+  var tcpSegCount uint64
+
+  sr := bufio.NewReader(src)
+  dw := bufio.NewWriter(dst)
 
   buf := make([]byte, bufSize)
 
   for {
-    if n, err := r.Read(buf); err == nil {
-      w.Write(buf[:n])
-      w.Flush()
+    if n, err := sr.Read(buf); err == nil {
+      if srcStun && (tcpSegCount == 0) {
+        if ciphertext, skey, err := xwing.Encapsulate(buf[:n]); err == nil {
+          cryptoKeys.encKeys[keyId] = skey
+          fmt.Printf("Encryption Key: %x\n", cryptoKeys.encKeys[keyId])
+          sw := bufio.NewWriter(src)
+          sw.Write(ciphertext)
+          sw.Flush()
 
-      *txRxBytes += float64(n)
+        } else {
+          log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+          src.Close()
+          break
+        }
+      } else if srcStun && (tcpSegCount == 1) {
+        if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
+          cryptoKeys.decKeys[keyId] = skey
+          fmt.Printf("Decryption Key: %x\n", cryptoKeys.decKeys[keyId])
+          todo.Done()
+
+        } else {
+          log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+          src.Close()
+          break
+        }
+      } else {
+        todo.Wait()
+
+        if srcStun {
+          fmt.Printf("Decrypt (nonce is %d) using %x\n", tcpSegCount - 2, cryptoKeys.decKeys[keyId])
+        }
+        if dstStun {
+          fmt.Printf("Encrypt (nonce is %d) using %x\n", tcpSegCount, cryptoKeys.encKeys[keyId ^ 1])
+        }
+
+        dw.Write(buf[:n])
+        dw.Flush()
+
+        *txRxBytes += float64(n)
+      }
+      tcpSegCount += 1
 
     } else {
-      dst.Close()
       break
     }
   }
+  dst.Close()
 }
