@@ -448,14 +448,14 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                     if srcStun {
                       fmt.Printf("Source is tunnel\n")
                       sw := bufio.NewWriter(c)
-                      sw.Write(cryptoKeys.public)
+                      sw.Write(append([]byte{0x01}, cryptoKeys.public...))
                       sw.Flush()
                       todo.Add(1)
                     }
                     if dstStun {
                       fmt.Printf("Destination is tunnel\n")
                       dw := bufio.NewWriter(t)
-                      dw.Write(cryptoKeys.public)
+                      dw.Write(append([]byte{0x01}, cryptoKeys.public...))
                       dw.Flush()
                       todo.Add(1)
                     }
@@ -511,47 +511,59 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 }
 
 func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKeys *CryptoKeys, keyId int, todo *sync.WaitGroup, txRxBytes *float64, args *Args) {
-  var tcpSegCount uint64
+  var pktSeqNum uint64
 
   sr := bufio.NewReader(src)
   dw := bufio.NewWriter(dst)
+  kemRequired := srcStun
 
   buf := make([]byte, bufSize)
 
   for {
     if n, err := sr.Read(buf); err == nil {
-      if srcStun && (tcpSegCount == 0) {
-        if ciphertext, skey, err := xwing.Encapsulate(buf[:n]); err == nil {
-          cryptoKeys.encKeys[keyId] = skey
-          fmt.Printf("Encryption Key: %x\n", cryptoKeys.encKeys[keyId])
-          sw := bufio.NewWriter(src)
-          sw.Write(ciphertext)
-          sw.Flush()
+      if kemRequired {
+        if pktSeqNum == 0 {
+          if buf[0] == 0x01 {
+            if ciphertext, skey, err := xwing.Encapsulate(buf[1:n]); err == nil {
+              cryptoKeys.encKeys[keyId] = skey
+              fmt.Printf("Encryption Key: %x\n", cryptoKeys.encKeys[keyId])
+              sw := bufio.NewWriter(src)
+              sw.Write(ciphertext)
+              sw.Flush()
 
-        } else {
-          log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
-          src.Close()
-          break
-        }
-      } else if srcStun && (tcpSegCount == 1) {
-        if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
-          cryptoKeys.decKeys[keyId] = skey
-          fmt.Printf("Decryption Key: %x\n", cryptoKeys.decKeys[keyId])
-          todo.Done()
+            } else {
+              log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+              src.Close()
+              break
+            }
+          } else {
+            log(args, "! TCP: %s -> %s (Error: unknown version)\n", src.RemoteAddr(), dst.RemoteAddr())
+            src.Close()
+            break
+          }
+        } else if pktSeqNum == 1 {
+          if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
+            cryptoKeys.decKeys[keyId] = skey
+            fmt.Printf("Decryption Key: %x\n", cryptoKeys.decKeys[keyId])
+            kemRequired = false
+            pktSeqNum = 0
+            todo.Done()
+            continue
 
-        } else {
-          log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
-          src.Close()
-          break
+          } else {
+            log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+            src.Close()
+            break
+          }
         }
       } else {
         todo.Wait()
 
         if srcStun {
-          fmt.Printf("Decrypt (nonce is %d) using %x\n", tcpSegCount - 2, cryptoKeys.decKeys[keyId])
+          fmt.Printf("Decrypt (nonce is %d) using %x\n", pktSeqNum, cryptoKeys.decKeys[keyId])
         }
         if dstStun {
-          fmt.Printf("Encrypt (nonce is %d) using %x\n", tcpSegCount, cryptoKeys.encKeys[keyId ^ 1])
+          fmt.Printf("Encrypt (nonce is %d) using %x\n", pktSeqNum, cryptoKeys.encKeys[keyId ^ 1])
         }
 
         dw.Write(buf[:n])
@@ -559,7 +571,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
 
         *txRxBytes += float64(n)
       }
-      tcpSegCount += 1
+      pktSeqNum++
 
     } else {
       break
