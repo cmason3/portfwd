@@ -19,7 +19,7 @@ For `bind_host` and `remote_host` you can either specify an IPv4 address (e.g. `
 You also have the option of specifying multiple TCP and/or UDP forwarders (one per line) within a configuration file, e.g:
 
 ```
-tcp [bind_host:]<listen_port>:<remote_host>:<remote_port>
+tcp [bind_host:]<listen_port>[st]:<remote_host>:<remote_port>[st]
 udp [bind_host:]<listen_port>:<remote_host>:<remote_port>
 ```
 
@@ -27,7 +27,7 @@ Command line arguments can be shortened as long as they don't become ambiguous (
 
 ### PQC Secure Tunnel
 
-Yep
+If you specify "st" after the port number then it will establish a secure tunnel between two instances of PortFwd. It uses the draft X-Wing KEM (https://datatracker.ietf.org/doc/html/draft-connolly-cfrg-xwing-kem), which is a hybrid post-quantum key encapsulation mechanism to generate ephemeral encryption/decryption keys which are used by ChaCha20-Poly1305. It should be noted that this only provides confidentiality and integrity, but doesn't authenticate the other host, which means it creates the potential for MiTM attacks.
 
 ### Installation
 
