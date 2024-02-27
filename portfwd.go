@@ -33,6 +33,8 @@ import (
   "encoding/binary"
   "filippo.io/mlkem768/xwing"
   "golang.org/x/crypto/chacha20poly1305"
+
+  "crypto/sha256"
 )
 
 var Version = "1.1.0"
@@ -105,7 +107,7 @@ func main() {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 
     } else {
-      fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [bind_host:]<listen_port>[s]:<remote_host>:<remote_port>[s]\n")
+      fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [bind_host:]<listen_port>[st]:<remote_host>:<remote_port>[st]\n")
       fmt.Fprintf(os.Stderr, "               -udp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
       fmt.Fprintf(os.Stderr, "               -logfile <portfwd.log>\n")
       fmt.Fprintf(os.Stderr, "               -config <portfwd.conf>\n")
@@ -120,7 +122,7 @@ func parseArgs() (Args, error) {
   args.fwdrs = make(map[string][]string)
   args.mode = "RR"
 
-  rfwdr := regexp.MustCompile(`(?i)^(?:(\[[0-9A-F:.]+\]|[^\s:]+):)?([0-9]+s?):(\[[0-9A-F:.]+\]|[^\s:]+):([0-9]+s?)$`)
+  rfwdr := regexp.MustCompile(`(?i)^(?:(\[[0-9A-F:.]+\]|[^\s:]+):)?([0-9]+(?:st)?):(\[[0-9A-F:.]+\]|[^\s:]+):([0-9]+(?:st)?)$`)
 
   for i := 1; i < len(os.Args); i++ {
     if smatch(os.Args[i], "-tcp", 2) || smatch(os.Args[i], "-udp", 2) || smatch(os.Args[i], "-config", 2) || smatch(os.Args[i], "-logfile", 2) {
@@ -395,9 +397,9 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
   defer wgf.Done()
 
-  srcStun := strings.HasSuffix(fwdr, "s")
+  srcStun := strings.HasSuffix(fwdr, "st")
 
-  if tcpAddr, err := net.ResolveTCPAddr("tcp", strings.TrimSuffix(fwdr, "s")); err == nil {
+  if tcpAddr, err := net.ResolveTCPAddr("tcp", strings.TrimSuffix(fwdr, "st")); err == nil {
     if s, err := net.ListenTCP("tcp", tcpAddr); err == nil {
       var wgc sync.WaitGroup
       var targetMutex sync.Mutex
@@ -431,8 +433,8 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
             defer wgc.Done()
             defer c.Close()
 
-            dstStun := strings.HasSuffix(target, "s")
-            target = strings.TrimSuffix(target, "s")
+            dstStun := strings.HasSuffix(target, "st")
+            target = strings.TrimSuffix(target, "st")
 
             if tcpAddr, err := net.ResolveTCPAddr("tcp", target); err == nil {
               log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), tcpAddr)
@@ -443,6 +445,7 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 
                 defer t.Close()
 
+                /*
                 if srcStun || dstStun {
                   var err error
 
@@ -467,10 +470,15 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                     return
                   }
                 }
+                */
 
                 var txRxBytes [2]float64
-                go forwardTcp(c, t, srcStun, dstStun, &cryptoKeys, 0, &todo, &txRxBytes[0], args)
-                forwardTcp(t, c, dstStun, srcStun, &cryptoKeys, 1, &todo, &txRxBytes[1], args)
+                var wgs sync.WaitGroup
+                wgs.Add(2)
+
+                go forwardTcp(c, t, srcStun, dstStun, &cryptoKeys, 0, &todo, &txRxBytes[0], args, &wgs)
+                forwardTcp(t, c, dstStun, srcStun, &cryptoKeys, 1, &todo, &txRxBytes[1], args, &wgs)
+                wgs.Wait()
 
                 log(args, "- TCP: %s -> %s (Tx: %s, Rx: %s)\n", c.RemoteAddr(), tcpAddr, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
                 return
@@ -513,126 +521,150 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
   }
 }
 
-func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKeys *CryptoKeys, keyId int, todo *sync.WaitGroup, txRxBytes *float64, args *Args) {
+func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKeys *CryptoKeys, keyId int, todo *sync.WaitGroup, txRxBytes *float64, args *Args, wgs *sync.WaitGroup) {
   var pktSeqNum uint64
   var rbuf []byte
 
+  defer wgs.Done()
+
   sr := bufio.NewReader(src)
   dw := bufio.NewWriter(dst)
-  kemRequired := srcStun
+  kemRequired := false // srcStun
 
   buf := make([]byte, bufSize)
   // nonce := make([]byte, chacha20poly1305.NonceSize)
 
-  for {
+  o: for {
     if n, err := sr.Read(buf); err == nil {
       if srcStun {
         rbuf = append(rbuf, buf[:n]...)
-
-        if rbuf[0] == 0x01 {
-          if len(rbuf) > 3 {
-            n = int(binary.BigEndian.Uint16(rbuf[1:3]))
-
-            if len(rbuf) >= (n + 3) {
-              buf = rbuf[3:n + 3]
-              rbuf = rbuf[n + 3:]
-
-              fmt.Printf("[%d] Rx Length is %d\n", keyId, n)
-
-            } else {
-              fmt.Printf("[%d] Not Enough\n", keyId)
-              continue
-            }
-          } else {
-            fmt.Printf("[%d] Not Enough\n", keyId)
-            continue
-          }
-        } else {
-          log(args, "! TCP: %s -> %s (Error: portfwd: unknown version)\n", src.RemoteAddr(), dst.RemoteAddr())
-          src.Close()
-          break
-        }
       }
-      if kemRequired {
-        if pktSeqNum == 0 {
-          if ciphertext, skey, err := xwing.Encapsulate(buf[:n]); err == nil {
-            var err error
-            if cryptoKeys.encrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
-              sw := bufio.NewWriter(src)
-              hdr := []byte{0x01, 0x00, 0x00}
-              binary.BigEndian.PutUint16(hdr[1:], uint16(len(ciphertext)))
-              sw.Write(append(hdr, ciphertext...))
-              sw.Flush()
-
-            } else {
-              log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
-              src.Close()
-              break
-            }
-          } else {
-            log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
-            src.Close()
-            break
-          }
-        } else if pktSeqNum == 1 {
-          if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
-            var err error
-            if cryptoKeys.decrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
-              kemRequired = false
-              pktSeqNum = 0
-              todo.Done()
-              continue
-
-            } else {
-              log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
-              src.Close()
-              break
-            }
-          } else {
-            log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
-            src.Close()
-            break
-          }
-        }
-      } else {
-        todo.Wait()
-
-        /*
+      for {
         if srcStun {
-          var err error
-          binary.BigEndian.PutUint64(nonce, pktSeqNum)
-          if buf, err = cryptoKeys.decrypt[keyId].Open(buf[:0], nonce, buf[:n], nil); err == nil {
-            n -= chacha20poly1305.Overhead
+          if len(rbuf) > 0 {
+            if rbuf[0] == 0x01 {
+              if len(rbuf) > 3 {
+                n = int(binary.BigEndian.Uint16(rbuf[1:3]))
 
+                if len(rbuf) >= (n + 3) {
+                  buf = rbuf[3:n + 3]
+                  rbuf = rbuf[n + 3:]
+
+                } else {
+                  continue o
+                }
+              } else {
+                continue o
+              }
+            } else {
+              log(args, "! TCP: %s -> %s (Error: portfwd: protocol version mismatch)\n", src.RemoteAddr(), dst.RemoteAddr())
+              src.Close()
+              break o
+            }
           } else {
-            log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
-            src.Close()
-            break
+            continue o
           }
         }
-        */
-
-        if dstStun {
-          hdr := []byte{0x01, 0x00, 0x00}
-          binary.BigEndian.PutUint16(hdr[1:], uint16(n))
-          // binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
-          //binary.BigEndian.PutUint64(nonce, pktSeqNum)
-          //buf = cryptoKeys.encrypt[keyId ^ 1].Seal(buf[:0], nonce, buf[:n], nil)
-          dw.Write(append(hdr, buf[:n]...))
-          //dw.Write(append(hdr, buf[:n + chacha20poly1305.Overhead]...))
-
+        if kemRequired {
+          if pktSeqNum == 0 {
+            if ciphertext, skey, err := xwing.Encapsulate(buf[:n]); err == nil {
+              fmt.Printf("[%d] Encrypt Key: %x\n", keyId, skey)
+              var err error
+              if cryptoKeys.encrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
+                sw := bufio.NewWriter(src)
+                hdr := []byte{0x01, 0x00, 0x00}
+                binary.BigEndian.PutUint16(hdr[1:], uint16(len(ciphertext)))
+                sw.Write(append(hdr, ciphertext...))
+                sw.Flush()
+  
+              } else {
+                log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+                src.Close()
+                break o
+              }
+            } else {
+              log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+              src.Close()
+              break o
+            }
+          } else if pktSeqNum == 1 {
+            if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
+              fmt.Printf("[%d] Decrypt Key: %x\n", keyId, skey)
+              var err error
+              if cryptoKeys.decrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
+                kemRequired = false
+                pktSeqNum = 0
+                todo.Done()
+                fmt.Printf("[%d] KEM Complete\n", keyId)
+                continue
+  
+              } else {
+                log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+                src.Close()
+                break o
+              }
+            } else {
+              log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+              src.Close()
+              break o
+            }
+          }
         } else {
-          dw.Write(buf[:n])
+          todo.Wait()
+  
+          if srcStun {
+            fmt.Printf("[ST][%3d] Rx: %x\n", pktSeqNum, sha256.Sum256(buf[:n]))
+            /*
+            var err error
+            binary.BigEndian.PutUint64(nonce, pktSeqNum)
+            if buf, err = cryptoKeys.decrypt[keyId].Open(buf[:0], nonce, buf[:n], nil); err == nil {
+              n -= chacha20poly1305.Overhead
+  
+            } else {
+              log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+              src.Close()
+              break
+            }
+            */
+          } else {
+            fmt.Printf("[C][%3d] Rx: %x\n", pktSeqNum, sha256.Sum256(buf[:n]))
+          }
+  
+          if dstStun {
+            hdr := []byte{0x01, 0x00, 0x00}
+            // binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
+            binary.BigEndian.PutUint16(hdr[1:], uint16(n))
+            // binary.BigEndian.PutUint64(nonce, pktSeqNum)
+            // buf = cryptoKeys.encrypt[keyId ^ 1].Seal(buf[:0], nonce, buf[:n], nil)
+            // dw.Write(append(hdr, buf[:n + chacha20poly1305.Overhead]...))
+            fmt.Printf("[ST][%3d] Tx: %x\n", pktSeqNum, sha256.Sum256(buf[:n]))
+            dw.Write(append(hdr, buf[:n]...))
+  
+          } else {
+            fmt.Printf("[C][%3d] Tx: %x\n", pktSeqNum, sha256.Sum256(buf[:n]))
+            dw.Write(buf[:n])
+          }
+          dw.Flush()
+  
+          *txRxBytes += float64(n)
         }
-        dw.Flush()
+        pktSeqNum++
 
-        *txRxBytes += float64(n)
+        if !srcStun {
+          continue o
+        }
       }
-      pktSeqNum++
-
     } else {
+      if srcStun {
+        n := int(binary.BigEndian.Uint16(rbuf[1:3]))
+        fmt.Printf("[ST] SRC CLOSED (%v) (rbuf is %d, plen is %d)\n", err, len(rbuf), n)
+
+      } else {
+        fmt.Printf("[C] SRC CLOSED (%v)\n", err)
+      }
       break
     }
   }
+  // time.Sleep(time.Second * 5)
   dst.Close()
 }

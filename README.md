@@ -5,7 +5,7 @@ A simple TCP and UDP based port forwarder for IPv4 and IPv6 which supports concu
 ### Usage
 
 ```
- portfwd -tcp [bind_host:]<listen_port>:<remote_host>:<remote_port>
+ portfwd -tcp [bind_host:]<listen_port>[st]:<remote_host>:<remote_port>[st]
          -udp [bind_host:]<listen_port>:<remote_host>:<remote_port>
          -logfile <portfwd.log>
          -config <portfwd.conf>
@@ -24,6 +24,12 @@ udp [bind_host:]<listen_port>:<remote_host>:<remote_port>
 ```
 
 Command line arguments can be shortened as long as they don't become ambiguous (e.g. `-t` for `-tcp` and `-c` for `-config`).
+
+### PQC Secure Tunnel
+
+Yep
+
+### Installation
 
 If you want to background the process and log the connections to a file then you can use the following syntax:
 
