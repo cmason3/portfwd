@@ -443,7 +443,6 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 
                 defer t.Close()
 
-                /*
                 if srcStun || dstStun {
                   var err error
 
@@ -468,7 +467,6 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                     return
                   }
                 }
-                */
 
                 var txRxBytes [2]float64
                 var wgs sync.WaitGroup
@@ -527,7 +525,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
 
   sr := bufio.NewReader(src)
   dw := bufio.NewWriter(dst)
-  kemRequired := false // srcStun
+  kemRequired := srcStun
 
   buf := make([]byte, bufSize)
   // nonce := make([]byte, chacha20poly1305.NonceSize)
@@ -568,6 +566,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
             if ciphertext, skey, err := xwing.Encapsulate(buf[:n]); err == nil {
               var err error
               if cryptoKeys.encrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
+                // fmt.Printf("DEBUG: [%d] Encryption Key: %x\n", keyId, skey)
                 sw := bufio.NewWriter(src)
                 hdr := []byte{0x01, 0x00, 0x00}
                 binary.BigEndian.PutUint16(hdr[1:], uint16(len(ciphertext)))
@@ -588,6 +587,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
             if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
               var err error
               if cryptoKeys.decrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
+                // fmt.Printf("DEBUG: [%d] Decryption Key: %x\n", keyId, skey)
                 kemRequired = false
                 pktSeqNum = 0
                 todo.Done()
