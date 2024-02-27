@@ -33,8 +33,6 @@ import (
   "encoding/binary"
   "filippo.io/mlkem768/xwing"
   "golang.org/x/crypto/chacha20poly1305"
-
-  "crypto/sha256"
 )
 
 var Version = "1.1.0"
@@ -568,7 +566,6 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
         if kemRequired {
           if pktSeqNum == 0 {
             if ciphertext, skey, err := xwing.Encapsulate(buf[:n]); err == nil {
-              fmt.Printf("[%d] Encrypt Key: %x\n", keyId, skey)
               var err error
               if cryptoKeys.encrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
                 sw := bufio.NewWriter(src)
@@ -576,7 +573,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
                 binary.BigEndian.PutUint16(hdr[1:], uint16(len(ciphertext)))
                 sw.Write(append(hdr, ciphertext...))
                 sw.Flush()
-  
+
               } else {
                 log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
                 src.Close()
@@ -589,15 +586,13 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
             }
           } else if pktSeqNum == 1 {
             if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
-              fmt.Printf("[%d] Decrypt Key: %x\n", keyId, skey)
               var err error
               if cryptoKeys.decrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
                 kemRequired = false
                 pktSeqNum = 0
                 todo.Done()
-                fmt.Printf("[%d] KEM Complete\n", keyId)
                 continue
-  
+
               } else {
                 log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
                 src.Close()
@@ -611,41 +606,36 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
           }
         } else {
           todo.Wait()
-  
+
+          /*
           if srcStun {
-            fmt.Printf("[ST][%3d] Rx: %x\n", pktSeqNum, sha256.Sum256(buf[:n]))
-            /*
             var err error
             binary.BigEndian.PutUint64(nonce, pktSeqNum)
             if buf, err = cryptoKeys.decrypt[keyId].Open(buf[:0], nonce, buf[:n], nil); err == nil {
               n -= chacha20poly1305.Overhead
-  
+
             } else {
               log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
               src.Close()
               break
             }
-            */
-          } else {
-            fmt.Printf("[C][%3d] Rx: %x\n", pktSeqNum, sha256.Sum256(buf[:n]))
           }
-  
+          */
+
           if dstStun {
             hdr := []byte{0x01, 0x00, 0x00}
-            // binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
             binary.BigEndian.PutUint16(hdr[1:], uint16(n))
+            // binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
             // binary.BigEndian.PutUint64(nonce, pktSeqNum)
             // buf = cryptoKeys.encrypt[keyId ^ 1].Seal(buf[:0], nonce, buf[:n], nil)
             // dw.Write(append(hdr, buf[:n + chacha20poly1305.Overhead]...))
-            fmt.Printf("[ST][%3d] Tx: %x\n", pktSeqNum, sha256.Sum256(buf[:n]))
             dw.Write(append(hdr, buf[:n]...))
-  
+
           } else {
-            fmt.Printf("[C][%3d] Tx: %x\n", pktSeqNum, sha256.Sum256(buf[:n]))
             dw.Write(buf[:n])
           }
           dw.Flush()
-  
+
           *txRxBytes += float64(n)
         }
         pktSeqNum++
@@ -655,16 +645,8 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
         }
       }
     } else {
-      if srcStun {
-        n := int(binary.BigEndian.Uint16(rbuf[1:3]))
-        fmt.Printf("[ST] SRC CLOSED (%v) (rbuf is %d, plen is %d)\n", err, len(rbuf), n)
-
-      } else {
-        fmt.Printf("[C] SRC CLOSED (%v)\n", err)
-      }
       break
     }
   }
-  // time.Sleep(time.Second * 5)
   dst.Close()
 }
