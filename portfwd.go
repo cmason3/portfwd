@@ -528,7 +528,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
   kemRequired := srcStun
 
   buf := make([]byte, bufSize)
-  // nonce := make([]byte, chacha20poly1305.NonceSize)
+  nonce := make([]byte, chacha20poly1305.NonceSize)
 
   o: for {
     if n, err := sr.Read(buf); err == nil {
@@ -543,7 +543,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
                 n = int(binary.BigEndian.Uint16(rbuf[1:3]))
 
                 if len(rbuf) >= (n + 3) {
-                  buf = rbuf[3:n + 3]
+                  copy(buf, rbuf[3:n + 3])
                   rbuf = rbuf[n + 3:]
 
                 } else {
@@ -607,29 +607,33 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
         } else {
           todo.Wait()
 
-          /*
           if srcStun {
-            var err error
             binary.BigEndian.PutUint64(nonce, pktSeqNum)
-            if buf, err = cryptoKeys.decrypt[keyId].Open(buf[:0], nonce, buf[:n], nil); err == nil {
+            fmt.Printf("BEFORE DECRYPT CAP is %d, Len is %d\n", cap(buf), len(buf))
+            if _, err := cryptoKeys.decrypt[keyId].Open(buf[:0], nonce, buf[:n], nil); err == nil {
               n -= chacha20poly1305.Overhead
+              fmt.Printf("AFTER DECRYPT CAP is %d, Len is %d\n", cap(buf), len(buf))
 
             } else {
               log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
               src.Close()
-              break
+              break o
             }
           }
-          */
 
           if dstStun {
             hdr := []byte{0x01, 0x00, 0x00}
-            binary.BigEndian.PutUint16(hdr[1:], uint16(n))
-            // binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
-            // binary.BigEndian.PutUint64(nonce, pktSeqNum)
-            // buf = cryptoKeys.encrypt[keyId ^ 1].Seal(buf[:0], nonce, buf[:n], nil)
-            // dw.Write(append(hdr, buf[:n + chacha20poly1305.Overhead]...))
-            dw.Write(append(hdr, buf[:n]...))
+
+            if (n + 3 + chacha20poly1305.Overhead) > 65535 {
+              fmt.Printf("Packet Too Large\n")
+            }
+
+            binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
+            // binary.BigEndian.PutUint16(hdr[1:], uint16(n))
+            binary.BigEndian.PutUint64(nonce, pktSeqNum)
+            ciphertext := cryptoKeys.encrypt[keyId ^ 1].Seal(nil, nonce, buf[:n], nil)
+            dw.Write(append(hdr, ciphertext...))
+            // dw.Write(append(hdr, buf[:n]...))
 
           } else {
             dw.Write(buf[:n])
