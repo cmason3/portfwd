@@ -204,6 +204,15 @@ func smatch(a string, b string, mlen int) bool {
   return false
 }
 
+func ternary(b bool, t string, f string) string {
+  if b {
+    return t
+
+  } else {
+    return f
+  }
+}
+
 func formatBytes(b float64) string {
   var u string
   for _, u = range []string{"", "k", "M", "G", "T", "P", "E"} {
@@ -440,7 +449,7 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
             target = strings.TrimSuffix(target, "|ST")
 
             if tcpAddr, err := net.ResolveTCPAddr("tcp", target); err == nil {
-              log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), tcpAddr)
+              log(args, "+ TCP: %s%s -> %s%s\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), tcpAddr, ternary(dstStun, "|ST", ""))
 
               if t, err := net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), time.Second * 5); err == nil {
                 var cryptoKeys CryptoKeys
@@ -467,7 +476,7 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                       todo.Add(1)
                     }
                   } else {
-                    log(args, "- TCP: %s -> %s (Error: %v)\n", c.RemoteAddr(), tcpAddr, err)
+                    log(args, "- TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), tcpAddr, ternary(dstStun, "|ST", ""), err)
                     return
                   }
                 }
@@ -480,15 +489,15 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                 forwardTcp(t, c, dstStun, srcStun, &cryptoKeys, 1, &todo, &txRxBytes[1], args, &wgs)
                 wgs.Wait()
 
-                log(args, "- TCP: %s -> %s (Tx: %s, Rx: %s)\n", c.RemoteAddr(), tcpAddr, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
+                log(args, "- TCP: %s%s -> %s%s (Tx: %s, Rx: %s)\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), tcpAddr, ternary(dstStun, "|ST", ""), formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
                 return
 
               } else {
-                log(args, "- TCP: %s -> %s (Error: %v)\n", c.RemoteAddr(), tcpAddr, err)
+                log(args, "- TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), tcpAddr, ternary(dstStun, "|ST", ""), err)
               }
             } else {
-              log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), target)
-              log(args, "- TCP: %s -> %s (Error: %v)\n", c.RemoteAddr(), target, err)
+              log(args, "+ TCP: %s%s -> %s%s\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), target, ternary(dstStun, "|ST", ""))
+              log(args, "- TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), target, ternary(dstStun, "|ST", ""), err)
             }
 
             if args.mode == "FT" {
