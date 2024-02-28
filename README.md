@@ -1,6 +1,6 @@
 # TCP/UDP Port Forwarder
 
-A simple TCP and UDP based port forwarder for IPv4 and IPv6 which supports concurrent connections and secure tunnels using post-quantum crypto.
+A simple TCP and UDP based port forwarder for IPv4 and IPv6 which supports concurrent connections and secure tunnels using hybrid post-quantum crypto.
 
 ### Usage
 
