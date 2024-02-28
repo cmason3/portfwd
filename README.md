@@ -1,6 +1,6 @@
 # TCP/UDP Port Forwarder
 
-A simple TCP and UDP based port forwarder for IPv4 and IPv6 which supports concurrent connections written in Go.
+A simple TCP and UDP based port forwarder for IPv4 and IPv6 which supports concurrent connections and secure tunnels using post-quantum crypto.
 
 ### Usage
 
@@ -27,7 +27,25 @@ Command line arguments can be shortened as long as they don't become ambiguous (
 
 ### PQC Secure Tunnel (Experimental)
 
-If you specify "st" after the port number then it will establish a secure tunnel between two instances of PortFwd. It uses the draft X-Wing KEM (https://datatracker.ietf.org/doc/html/draft-connolly-cfrg-xwing-kem), which is a hybrid post-quantum key encapsulation mechanism to generate ephemeral encryption/decryption keys which are used by ChaCha20-Poly1305. It should be noted that this only provides confidentiality and integrity - it doesn't authenticate the other host.
+If you specify "st" after the port number then it will establish a secure tunnel between two instances of PortFwd. It uses the draft X-Wing KEM (https://datatracker.ietf.org/doc/html/draft-connolly-cfrg-xwing-kem), which is a hybrid post-quantum key encapsulation mechanism to generate ephemeral encryption/decryption keys which are used by ChaCha20-Poly1305. It should be noted that this only provides confidentiality and integrity - it doesn't authenticate the hosts.
+
+Each TCP session will use a different set of encryption and decryption keys that are generated randomly when the TCP session is established - the maximum amount of data a single TCP session can send using the same set of keys is 2<sup>64</sup> packets as we use a `uint64` packet counter as the `nonce`.
+
+For example, to create a secure tunnel for HTTP traffic you could use it as follows:
+
+#### Host 1
+
+```
+portfwd -tcp 0.0.0.0:8080:<Host 2>:8080st
+```
+
+#### Host 2
+
+```
+portfwd -tcp 0.0.0.0:8080st:<Server>:80
+```
+
+If you then connect to Host 1 on port 8080 then it will tunnel the traffic towards the Server via Host 2 using an encrypted tunnel.
 
 ### Installation
 

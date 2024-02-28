@@ -1,7 +1,7 @@
 ## CHANGELOG
 
 #### 1.1.0 - In Development
-- Add support for ChaCha20-Poly1305 encrypted TCP tunnels using PQ X-Wing KEM
+- Add support for ChaCha20-Poly1305 encrypted TCP tunnels using PQC X-Wing Key Encapsulation Mechanisms
 
 #### 1.0.7 - 20th February 2024
 - Add support for forwarders based on IPv6 or DNS hostnames
