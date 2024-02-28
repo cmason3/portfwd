@@ -571,6 +571,9 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
                 continue o
               }
             } else {
+              if kemRequired {
+                todo.Done()
+              }
               log(args, "! TCP: %s%s -> %s%s (Error: portfwd: protocol version mismatch)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""))
               src.Close()
               break o
@@ -593,20 +596,23 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
               } else {
                 log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
                 src.Close()
+                todo.Done()
                 break o
               }
             } else {
               log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
               src.Close()
+              todo.Done()
               break o
             }
           } else if pktSeqNum == 1 {
+            todo.Done()
+
             if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
               var err error
               if cryptoKeys.decrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
                 kemRequired = false
                 pktSeqNum = 0
-                todo.Done()
                 continue
 
               } else {
@@ -636,12 +642,16 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
           }
 
           if dstStun {
-            hdr := []byte{0x01, 0x00, 0x00}
-            binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
-            binary.BigEndian.PutUint64(nonce, pktSeqNum)
-            ciphertext := cryptoKeys.encrypt[keyId ^ 1].Seal(nil, nonce, buf[:n], nil)
-            dw.Write(append(hdr, ciphertext...))
+            if cryptoKeys.encrypt[keyId ^ 1] != nil {
+              hdr := []byte{0x01, 0x00, 0x00}
+              binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
+              binary.BigEndian.PutUint64(nonce, pktSeqNum)
+              ciphertext := cryptoKeys.encrypt[keyId ^ 1].Seal(nil, nonce, buf[:n], nil)
+              dw.Write(append(hdr, ciphertext...))
 
+            } else {
+              break o
+            }
           } else {
             dw.Write(buf[:n])
           }
