@@ -36,13 +36,13 @@ To create a secure tunnel for HTTP traffic you could use it as follows:
 #### Host 1
 
 <pre>
-portfwd -tcp 0.0.0.0:8080:&lt;Host 2&gt;:8080<b>s</b>
+portfwd -tcp 0.0.0.0:8080:&lt;Host 2&gt;:8080<span color="red">s</span>
 </pre>
 
 #### Host 2
 
 <pre>
-portfwd -tcp 0.0.0.0:8080<b>s</b>&lt;Server&gt;:80
+portfwd -tcp 0.0.0.0:8080<b>s</b>:&lt;Server&gt;:80
 </pre>
 
 If a Client then connects to Host 1 on port 8080 then it will tunnel the traffic towards the Server via Host 2 using an encrypted tunnel.
