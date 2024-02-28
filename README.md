@@ -5,7 +5,7 @@ A simple TCP and UDP based port forwarder for IPv4 and IPv6 which supports concu
 ### Usage
 
 ```
- portfwd -tcp [<bind_host>:]<listen_port>[st]:<remote_host>:<remote_port>[st]
+ portfwd -tcp [<bind_host>:]<listen_port>[s]:<remote_host>:<remote_port>[s]
          -udp [<bind_host>:]<listen_port>:<remote_host>:<remote_port>
          -logfile <portfwd.log>
          -config <portfwd.conf>
@@ -19,7 +19,7 @@ For `bind_host` and `remote_host` you can either specify an IPv4 address (e.g. `
 You also have the option of specifying multiple TCP and/or UDP forwarders (one per line) within a configuration file, e.g:
 
 ```
-tcp [<bind_host>:]<listen_port>[st]:<remote_host>:<remote_port>[st]
+tcp [<bind_host>:]<listen_port>[s]:<remote_host>:<remote_port>[s]
 udp [<bind_host>:]<listen_port>:<remote_host>:<remote_port>
 ```
 
