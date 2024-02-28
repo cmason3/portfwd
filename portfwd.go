@@ -571,7 +571,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
                 continue o
               }
             } else {
-              log(args, "! TCP: %s -> %s (Error: portfwd: protocol version mismatch)\n", src.RemoteAddr(), dst.RemoteAddr())
+              log(args, "! TCP: %s%s -> %s%s (Error: portfwd: protocol version mismatch)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""))
               src.Close()
               break o
             }
@@ -591,12 +591,12 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
                 sw.Flush()
 
               } else {
-                log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+                log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
                 src.Close()
                 break o
               }
             } else {
-              log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+              log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
               src.Close()
               break o
             }
@@ -610,12 +610,12 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
                 continue
 
               } else {
-                log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+                log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
                 src.Close()
                 break o
               }
             } else {
-              log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+              log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
               src.Close()
               break o
             }
@@ -629,7 +629,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
               n -= chacha20poly1305.Overhead
 
             } else {
-              log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
+              log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
               src.Close()
               break o
             }
@@ -654,7 +654,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
           pktSeqNum++
 
         } else {
-          log(args, "! TCP: %s -> %s (Error: portfwd: nonce re-use prohibited)\n", src.RemoteAddr(), dst.RemoteAddr())
+          log(args, "! TCP: %s%s -> %s%s (Error: portfwd: nonce re-use prohibited)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""))
           src.Close()
           break o
         }
