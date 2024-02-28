@@ -45,7 +45,7 @@ portfwd -tcp 0.0.0.0:8080:<Host 2>:8080st
 portfwd -tcp 0.0.0.0:8080st:<Server>:80
 ```
 
-If you then connect to Host 1 on port 8080 then it will tunnel the traffic towards the Server via Host 2 using an encrypted tunnel.
+If a Client then connects to Host 1 on port 8080 then it will tunnel the traffic towards the Server via Host 2 using an encrypted tunnel.
 
 ### Installation
 
