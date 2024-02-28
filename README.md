@@ -36,7 +36,7 @@ To create a secure tunnel for HTTP traffic you could use it as follows:
 #### Host 1
 
 <pre>
-portfwd -tcp 0.0.0.0:8080:&lt;Host 2&gt;:8080<span color="red">s</span>
+portfwd -tcp 0.0.0.0:8080:&lt;Host 2&gt;:8080<span style="color: red">s</span>
 </pre>
 
 #### Host 2
