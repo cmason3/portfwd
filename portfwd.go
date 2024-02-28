@@ -520,6 +520,7 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKeys *CryptoKeys, keyId int, todo *sync.WaitGroup, txRxBytes *float64, args *Args, wgs *sync.WaitGroup) {
   var pktSeqNum uint64
   var rbuf []byte
+  var oH int
 
   defer wgs.Done()
 
@@ -527,7 +528,11 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
   dw := bufio.NewWriter(dst)
   kemRequired := srcStun
 
-  buf := make([]byte, bufSize)
+  if !srcStun && dstStun {
+    oH = 3 + chacha20poly1305.Overhead
+  }
+
+  buf := make([]byte, bufSize - oH)
   nonce := make([]byte, chacha20poly1305.NonceSize)
 
   o: for {
@@ -566,7 +571,6 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
             if ciphertext, skey, err := xwing.Encapsulate(buf[:n]); err == nil {
               var err error
               if cryptoKeys.encrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
-                // fmt.Printf("DEBUG: [%d] Encryption Key: %x\n", keyId, skey)
                 sw := bufio.NewWriter(src)
                 hdr := []byte{0x01, 0x00, 0x00}
                 binary.BigEndian.PutUint16(hdr[1:], uint16(len(ciphertext)))
@@ -587,7 +591,6 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
             if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
               var err error
               if cryptoKeys.decrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
-                // fmt.Printf("DEBUG: [%d] Decryption Key: %x\n", keyId, skey)
                 kemRequired = false
                 pktSeqNum = 0
                 todo.Done()
@@ -609,10 +612,8 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
 
           if srcStun {
             binary.BigEndian.PutUint64(nonce, pktSeqNum)
-            fmt.Printf("BEFORE DECRYPT CAP is %d, Len is %d\n", cap(buf), len(buf))
             if _, err := cryptoKeys.decrypt[keyId].Open(buf[:0], nonce, buf[:n], nil); err == nil {
               n -= chacha20poly1305.Overhead
-              fmt.Printf("AFTER DECRYPT CAP is %d, Len is %d\n", cap(buf), len(buf))
 
             } else {
               log(args, "! TCP: %s -> %s (Error: %v)\n", src.RemoteAddr(), dst.RemoteAddr(), err)
@@ -623,17 +624,10 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
 
           if dstStun {
             hdr := []byte{0x01, 0x00, 0x00}
-
-            if (n + 3 + chacha20poly1305.Overhead) > 65535 {
-              fmt.Printf("Packet Too Large\n")
-            }
-
             binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
-            // binary.BigEndian.PutUint16(hdr[1:], uint16(n))
             binary.BigEndian.PutUint64(nonce, pktSeqNum)
             ciphertext := cryptoKeys.encrypt[keyId ^ 1].Seal(nil, nonce, buf[:n], nil)
             dw.Write(append(hdr, ciphertext...))
-            // dw.Write(append(hdr, buf[:n]...))
 
           } else {
             dw.Write(buf[:n])
