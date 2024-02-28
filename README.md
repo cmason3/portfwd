@@ -29,7 +29,7 @@ Command line arguments can be shortened as long as they don't become ambiguous (
 
 If you specify "s" after the port number then it will establish a secure tunnel between two instances of PortFwd. It uses the draft X-Wing KEM (https://datatracker.ietf.org/doc/html/draft-connolly-cfrg-xwing-kem), which is a hybrid post-quantum key encapsulation mechanism to generate ephemeral encryption/decryption keys, which are used by ChaCha20-Poly1305. It should be noted that this only provides confidentiality and integrity - it doesn't authenticate the hosts.
 
-Each TCP session will use a different set of encryption and decryption keys that are generated randomly when the TCP session is established. The maximum amount of data a single TCP session can send using the same set of keys is 2<sup>64</sup> packets (18.4 quintillion) as we use a `uint64` packet counter as the `nonce`. It is extremely unlikely that any TCP session is going to get anywhere near this number, but to prevent `nonce` re-use we will terminate the TCP session if you do.
+Each TCP session will use a different set of encryption and decryption keys that are generated randomly when the TCP session is established. The maximum amount of data a single TCP session can send using the same set of keys is 2<sup>64</sup> packets (18.4 quintillion) as we use a `uint64` packet counter as the `nonce`. It is extremely unlikely that any TCP session is going to get anywhere near this number, but to prevent `nonce` re-use it will terminate the TCP session if you do.
 
 To create a secure tunnel for HTTP traffic you could use it as follows:
 
