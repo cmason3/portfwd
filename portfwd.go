@@ -29,6 +29,7 @@ import (
   "syscall"
   "os/signal"
   "path/filepath"
+
   "crypto/cipher"
   "encoding/binary"
   "filippo.io/mlkem768/xwing"
@@ -445,7 +446,6 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 
                 if srcStun || dstStun {
                   var err error
-
                   if cryptoKeys.public, cryptoKeys.private, err = xwing.GenerateKey(); err == nil {
                     hdr := []byte{0x01, 0x00, 0x00}
                     binary.BigEndian.PutUint16(hdr[1:], uint16(len(cryptoKeys.public)))
