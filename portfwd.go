@@ -23,6 +23,7 @@ import (
   "net"
   "sync"
   "time"
+  "math"
   "bufio"
   "regexp"
   "strings"
@@ -636,8 +637,15 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
 
           *txRxBytes += float64(n)
         }
-        pktSeqNum++
 
+        if math.MaxUint64 > pktSeqNum {
+          pktSeqNum++
+
+        } else {
+          log(args, "! TCP: %s -> %s (Error: portfwd: nonce re-use prohibited)\n", src.RemoteAddr(), dst.RemoteAddr())
+          src.Close()
+          break o
+        }
         if !srcStun {
           continue o
         }
