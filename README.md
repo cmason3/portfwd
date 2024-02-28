@@ -25,7 +25,7 @@ udp [bind_host:]<listen_port>:<remote_host>:<remote_port>
 
 Command line arguments can be shortened as long as they don't become ambiguous (e.g. `-t` for `-tcp` and `-c` for `-config`).
 
-### PQC Secure Tunnel
+### PQC Secure Tunnel (Experimental)
 
 If you specify "st" after the port number then it will establish a secure tunnel between two instances of PortFwd. It uses the draft X-Wing KEM (https://datatracker.ietf.org/doc/html/draft-connolly-cfrg-xwing-kem), which is a hybrid post-quantum key encapsulation mechanism to generate ephemeral encryption/decryption keys which are used by ChaCha20-Poly1305. It should be noted that this only provides confidentiality and integrity - it doesn't authenticate the other host.
 
