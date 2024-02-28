@@ -30,7 +30,6 @@ import (
   "syscall"
   "os/signal"
   "path/filepath"
-
   "crypto/cipher"
   "encoding/binary"
   "filippo.io/mlkem768/xwing"
@@ -107,8 +106,8 @@ func main() {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 
     } else {
-      fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [bind_host:]<listen_port>[st]:<remote_host>:<remote_port>[st]\n")
-      fmt.Fprintf(os.Stderr, "               -udp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
+      fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [<bind_host>:]<listen_port>[s]:<remote_host>:<remote_port>[s]\n")
+      fmt.Fprintf(os.Stderr, "               -udp [<bind_host>:]<listen_port>:<remote_host>:<remote_port>\n")
       fmt.Fprintf(os.Stderr, "               -logfile <portfwd.log>\n")
       fmt.Fprintf(os.Stderr, "               -config <portfwd.conf>\n")
       fmt.Fprintf(os.Stderr, "               -ft-tcp\n")
@@ -122,7 +121,7 @@ func parseArgs() (Args, error) {
   args.fwdrs = make(map[string][]string)
   args.mode = "RR"
 
-  rfwdr := regexp.MustCompile(`(?i)^(?:(\[[0-9A-F:.]+\]|[^\s:]+):)?([0-9]+(?:st)?):(\[[0-9A-F:.]+\]|[^\s:]+):([0-9]+(?:st)?)$`)
+  rfwdr := regexp.MustCompile(`(?i)^(?:(\[[0-9A-F:.]+\]|[^\s:]+):)?([0-9]+s?):(\[[0-9A-F:.]+\]|[^\s:]+):([0-9]+s?)$`)
 
   for i := 1; i < len(os.Args); i++ {
     if smatch(os.Args[i], "-tcp", 2) || smatch(os.Args[i], "-udp", 2) || smatch(os.Args[i], "-config", 2) || smatch(os.Args[i], "-logfile", 2) {
@@ -164,6 +163,10 @@ func parseArgs() (Args, error) {
               if len(m[1]) == 0 {
                 m[1] = "localhost"
               }
+
+              rst := regexp.MustCompile(`(?i)s$`)
+              m[2] = rst.ReplaceAllString(m[2], "|ST")
+              m[4] = rst.ReplaceAllString(m[4], "|ST")
               mkey := os.Args[i][1:2] + ":" + strings.Join(m[1:3], ":")
               args.fwdrs[mkey] = append(args.fwdrs[mkey], strings.Join(m[3:], ":"))
 
@@ -397,9 +400,9 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
   defer wgf.Done()
 
-  srcStun := strings.HasSuffix(fwdr, "st")
+  srcStun := strings.HasSuffix(fwdr, "|ST")
 
-  if tcpAddr, err := net.ResolveTCPAddr("tcp", strings.TrimSuffix(fwdr, "st")); err == nil {
+  if tcpAddr, err := net.ResolveTCPAddr("tcp", strings.TrimSuffix(fwdr, "|ST")); err == nil {
     if s, err := net.ListenTCP("tcp", tcpAddr); err == nil {
       var wgc sync.WaitGroup
       var targetMutex sync.Mutex
@@ -433,8 +436,8 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
             defer wgc.Done()
             defer c.Close()
 
-            dstStun := strings.HasSuffix(target, "st")
-            target = strings.TrimSuffix(target, "st")
+            dstStun := strings.HasSuffix(target, "|ST")
+            target = strings.TrimSuffix(target, "|ST")
 
             if tcpAddr, err := net.ResolveTCPAddr("tcp", target); err == nil {
               log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), tcpAddr)
