@@ -668,13 +668,15 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
           *txRxBytes += float64(n)
         }
 
-        if math.MaxUint64 > pktSeqNum {
-          pktSeqNum++
+        if srcStun || dstStun {
+          if math.MaxUint64 > pktSeqNum {
+            pktSeqNum++
 
-        } else {
-          log(args, "! TCP: %s (Error: portfwd: nonce re-use prohibited)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun))
-          src.Close()
-          break o
+          } else {
+            log(args, "! TCP: %s (Error: portfwd: nonce re-use prohibited)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun))
+            src.Close()
+            break o
+          }
         }
         if !srcStun {
           continue o
