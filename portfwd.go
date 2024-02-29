@@ -256,6 +256,10 @@ func log(args *Args, f string, a ...any) error {
   return nil
 }
 
+func udpFlowId(src string, s *net.UDPConn, dst string) string {
+  return fmt.Sprintf("%s[%s] -> %s", src, strings.Split(s.LocalAddr().String(), ":")[1], dst)
+}
+
 func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
   defer wgf.Done()
 
@@ -275,7 +279,7 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 
       wgc.Add(1)
 
-      go func(udpConns map[string]*UDPConn, udpConnsMutex *sync.RWMutex, shutdown chan struct{}, args *Args) {
+      go func(s *net.UDPConn, udpConns map[string]*UDPConn, udpConnsMutex *sync.RWMutex, shutdown chan struct{}, args *Args) {
         defer wgc.Done()
         var stop bool
 
@@ -311,10 +315,10 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
             delete(udpConns, k)
             udpConnsMutex.Unlock()
 
-            log(args, "- UDP: %s -> %s (Tx: %s, Rx: %s)\n", k, target, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
+            log(args, "- UDP: %s (Tx: %s, Rx: %s)\n", udpFlowId(k, s, target), formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
           }
         }
-      }(udpConns, &udpConnsMutex, args.shutdown, args)
+      }(s, udpConns, &udpConnsMutex, args.shutdown, args)
 
       go func(shutdown chan struct{}, udpConns map[string]*UDPConn, udpConnsMutex *sync.RWMutex) {
         <-shutdown
@@ -338,7 +342,7 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
             target := targets[connCount % len(targets)]
 
             if t, err := net.ResolveUDPAddr("udp", target); err == nil {
-              log(args, "+ UDP: %s -> %s\n", addr, t)
+              log(args, "+ UDP: %s\n", udpFlowId(addr.String(), s, t.String()))
 
               if c, err := net.DialUDP("udp", nil, t); err == nil {
                 u = &UDPConn {
@@ -373,11 +377,11 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                 ok = true
 
               } else {
-                log(args, "- UDP: %s -> %s (Error: %v)\n", addr, t, err)
+                log(args, "- UDP: %s (Error: %v)\n", udpFlowId(addr.String(), s, t.String()), err)
               }
             } else {
-              log(args, "+ UDP: %s -> %s\n", addr, target)
-              log(args, "- UDP: %s -> %s (Error: %v)\n", addr, target, err)
+              log(args, "+ UDP: %s\n", udpFlowId(addr.String(), s, target))
+              log(args, "- UDP: %s (Error: %v)\n", udpFlowId(addr.String(), s, target), err)
             }
           }
 
@@ -404,6 +408,10 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
   } else {
     fmt.Fprintf(os.Stderr, "Error: %v\n", err)
   }
+}
+
+func tcpFlowId(src net.Conn, dst string, srcStun bool, dstStun bool) string {
+  return fmt.Sprintf("%s%s[%s] -> %s%s", ternary(srcStun, "ST|", ""), src.RemoteAddr(), strings.Split(src.LocalAddr().String(), ":")[1], dst, ternary(dstStun, "|ST", ""))
 }
 
 func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
@@ -449,7 +457,7 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
             target = strings.TrimSuffix(target, "|ST")
 
             if tcpAddr, err := net.ResolveTCPAddr("tcp", target); err == nil {
-              log(args, "+ TCP: %s%s -> %s%s\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), tcpAddr, ternary(dstStun, "|ST", ""))
+              log(args, "+ TCP: %s\n", tcpFlowId(c, tcpAddr.String(), srcStun, dstStun))
 
               if t, err := net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), time.Second * 5); err == nil {
                 var cryptoKeys CryptoKeys
@@ -476,7 +484,7 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                       todo.Add(1)
                     }
                   } else {
-                    log(args, "- TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), tcpAddr, ternary(dstStun, "|ST", ""), err)
+                    log(args, "- TCP: %s (Error: %v)\n", tcpFlowId(c, tcpAddr.String(), srcStun, dstStun), err)
                     return
                   }
                 }
@@ -489,15 +497,15 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                 forwardTcp(t, c, dstStun, srcStun, &cryptoKeys, 1, &todo, &txRxBytes[1], args, &wgs)
                 wgs.Wait()
 
-                log(args, "- TCP: %s%s -> %s%s (Tx: %s, Rx: %s)\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), tcpAddr, ternary(dstStun, "|ST", ""), formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
+                log(args, "- TCP: %s (Tx: %s, Rx: %s)\n", tcpFlowId(c, tcpAddr.String(), srcStun, dstStun), formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
                 return
 
               } else {
-                log(args, "- TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), tcpAddr, ternary(dstStun, "|ST", ""), err)
+                log(args, "- TCP: %s (Error: %v)\n", tcpFlowId(c, tcpAddr.String(), srcStun, dstStun), err)
               }
             } else {
-              log(args, "+ TCP: %s%s -> %s%s\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), target, ternary(dstStun, "|ST", ""))
-              log(args, "- TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), c.RemoteAddr(), target, ternary(dstStun, "|ST", ""), err)
+              log(args, "+ TCP: %s\n", tcpFlowId(c, target, srcStun, dstStun), err)
+              log(args, "- TCP: %s (Error: %v)\n", tcpFlowId(c, target, srcStun, dstStun), err)
             }
 
             if args.mode == "FT" {
@@ -574,7 +582,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
               if kemRequired {
                 todo.Done()
               }
-              log(args, "! TCP: %s%s -> %s%s (Error: portfwd: protocol version mismatch)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""))
+              log(args, "! TCP: %s (Error: portfwd: protocol version mismatch)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun))
               src.Close()
               break o
             }
@@ -594,13 +602,13 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
                 sw.Flush()
 
               } else {
-                log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
                 src.Close()
                 todo.Done()
                 break o
               }
             } else {
-              log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
+              log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
               src.Close()
               todo.Done()
               break o
@@ -616,12 +624,12 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
                 continue
 
               } else {
-                log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
                 src.Close()
                 break o
               }
             } else {
-              log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
+              log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
               src.Close()
               break o
             }
@@ -635,7 +643,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
               n -= chacha20poly1305.Overhead
 
             } else {
-              log(args, "! TCP: %s%s -> %s%s (Error: %v)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""), err)
+              log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
               src.Close()
               break o
             }
@@ -664,7 +672,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
           pktSeqNum++
 
         } else {
-          log(args, "! TCP: %s%s -> %s%s (Error: portfwd: nonce re-use prohibited)\n", ternary(srcStun, "ST|", ""), src.RemoteAddr(), dst.RemoteAddr(), ternary(dstStun, "|ST", ""))
+          log(args, "! TCP: %s (Error: portfwd: nonce re-use prohibited)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun))
           src.Close()
           break o
         }
