@@ -26,6 +26,7 @@ import (
   "math"
   "bufio"
   "regexp"
+  "errors"
   "strings"
   "syscall"
   "os/signal"
@@ -556,6 +557,10 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
   buf := make([]byte, bufSize - oH)
   nonce := make([]byte, chacha20poly1305.NonceSize)
 
+  if kemRequired {
+    src.SetReadDeadline(time.Now().Add(time.Second * 5))
+  }
+
   o: for {
     if n, err := sr.Read(buf); err == nil {
       if srcStun {
@@ -582,7 +587,12 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
               if kemRequired {
                 todo.Done()
               }
-              log(args, "! TCP: %s (Error: portfwd: protocol version mismatch)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun))
+              if keyId == 1 {
+                log(args, "! TCP: %s (Error: portfwd: protocol version mismatch)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun))
+
+              } else {
+                log(args, "! TCP: %s (Error: portfwd: protocol version mismatch)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun))
+              }
               src.Close()
               break o
             }
@@ -602,13 +612,23 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
                 sw.Flush()
 
               } else {
-                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+                if keyId == 1 {
+                  log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+                } else {
+                  log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+                }
                 src.Close()
                 todo.Done()
                 break o
               }
             } else {
-              log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+              if keyId == 1 {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+              } else {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+              }
               src.Close()
               todo.Done()
               break o
@@ -619,17 +639,28 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
             if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
               var err error
               if cryptoKeys.decrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
+                src.SetReadDeadline(time.Time{})
                 kemRequired = false
                 pktSeqNum = 0
                 continue
 
               } else {
-                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+                if keyId == 1 {
+                  log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+                } else {
+                  log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+                }
                 src.Close()
                 break o
               }
             } else {
-              log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+              if keyId == 1 {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+              } else {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+              }
               src.Close()
               break o
             }
@@ -643,7 +674,12 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
               n -= chacha20poly1305.Overhead
 
             } else {
-              log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+              if keyId == 1 {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+              } else {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+              }
               src.Close()
               break o
             }
@@ -673,7 +709,12 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
             pktSeqNum++
 
           } else {
-            log(args, "! TCP: %s (Error: portfwd: nonce re-use prohibited)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun))
+            if keyId == 1 {
+              log(args, "! TCP: %s (Error: portfwd: nonce re-use prohibited)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun))
+
+            } else {
+              log(args, "! TCP: %s (Error: portfwd: nonce re-use prohibited)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun))
+            }
             src.Close()
             break o
           }
@@ -683,6 +724,18 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
         }
       }
     } else {
+      if errors.Is(err, os.ErrDeadlineExceeded) {
+        if kemRequired {
+          todo.Done()
+        }
+        if keyId == 1 {
+          log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+        } else {
+          log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+        }
+        src.Close()
+      }
       break
     }
   }
