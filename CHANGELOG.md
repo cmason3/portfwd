@@ -1,14 +1,14 @@
 ## CHANGELOG
 
 #### 1.1.0 - 29th February 2024
-- Add support for ChaCha20-Poly1305 encrypted TCP tunnels using PQC X-Wing Key Encapsulation Mechanisms
+- Added support for ChaCha20-Poly1305 encrypted TCP tunnels using PQC X-Wing Key Encapsulation Mechanisms
 - Avoid a race condition by waiting for both sides of the TCP session to close via a WaitGroup
 
 #### 1.0.7 - 20th February 2024
-- Add support for forwarders based on IPv6 or DNS hostnames
+- Added support for forwarders based on IPv6 or DNS hostnames
 
 #### 1.0.6 - 19th February 2024
-- Add support for fault tolerant TCP load balancing
+- Added support for fault tolerant TCP load balancing
 
 #### 1.0.5 - 12th February 2024
 - Various code cleanups to make the code easier to read and more efficient
