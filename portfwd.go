@@ -411,7 +411,7 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 }
 
 func tcpFlowId(src net.Conn, dst string, srcStun bool, dstStun bool) string {
-  return fmt.Sprintf("%s%s[%s] -> %s%s", ternary(srcStun, "ST|", ""), src.RemoteAddr(), strings.Split(src.LocalAddr().String(), ":")[1], dst, ternary(dstStun, "|ST", ""))
+  return fmt.Sprintf("%s[%s%s] -> %s%s", src.RemoteAddr(), ternary(srcStun, "|ST", ""), strings.Split(src.LocalAddr().String(), ":")[1], dst, ternary(dstStun, "|ST", ""))
 }
 
 func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
