@@ -23,15 +23,21 @@ import (
   "net"
   "sync"
   "time"
+  "math"
   "bufio"
   "regexp"
+  "errors"
   "strings"
   "syscall"
   "os/signal"
   "path/filepath"
+  "crypto/cipher"
+  "encoding/binary"
+  "filippo.io/mlkem768/xwing"
+  "golang.org/x/crypto/chacha20poly1305"
 )
 
-var Version = "1.0.7"
+var Version = "1.1.0"
 
 const (
   bufSize = 65535
@@ -51,6 +57,13 @@ type UDPConn struct {
   dst *net.UDPConn
   txRxBytes [2]float64
   lastActivity time.Time
+}
+
+type CryptoKeys struct {
+  public []byte
+  private []byte
+  encrypt [2]cipher.AEAD
+  decrypt [2]cipher.AEAD
 }
 
 func main() {
@@ -94,8 +107,8 @@ func main() {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 
     } else {
-      fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
-      fmt.Fprintf(os.Stderr, "               -udp [bind_host:]<listen_port>:<remote_host>:<remote_port>\n")
+      fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [<bind_host>:]<listen_port>[s]:<remote_host>:<remote_port>[s]\n")
+      fmt.Fprintf(os.Stderr, "               -udp [<bind_host>:]<listen_port>:<remote_host>:<remote_port>\n")
       fmt.Fprintf(os.Stderr, "               -logfile <portfwd.log>\n")
       fmt.Fprintf(os.Stderr, "               -config <portfwd.conf>\n")
       fmt.Fprintf(os.Stderr, "               -ft-tcp\n")
@@ -109,7 +122,7 @@ func parseArgs() (Args, error) {
   args.fwdrs = make(map[string][]string)
   args.mode = "RR"
 
-  rfwdr := regexp.MustCompile(`(?i)^(?:(\[[0-9A-F:.]+\]|[^\s:]+):)?([0-9]+):(\[[0-9A-F:.]+\]|[^\s:]+):([0-9]+)$`)
+  rfwdr := regexp.MustCompile(`(?i)^(?:(\[[0-9A-F:.]+\]|[^\s:]+):)?([0-9]+s?):(\[[0-9A-F:.]+\]|[^\s:]+):([0-9]+s?)$`)
 
   for i := 1; i < len(os.Args); i++ {
     if smatch(os.Args[i], "-tcp", 2) || smatch(os.Args[i], "-udp", 2) || smatch(os.Args[i], "-config", 2) || smatch(os.Args[i], "-logfile", 2) {
@@ -151,6 +164,10 @@ func parseArgs() (Args, error) {
               if len(m[1]) == 0 {
                 m[1] = "localhost"
               }
+
+              rst := regexp.MustCompile(`(?i)s$`)
+              m[2] = rst.ReplaceAllString(m[2], "|ST")
+              m[4] = rst.ReplaceAllString(m[4], "|ST")
               mkey := os.Args[i][1:2] + ":" + strings.Join(m[1:3], ":")
               args.fwdrs[mkey] = append(args.fwdrs[mkey], strings.Join(m[3:], ":"))
 
@@ -186,6 +203,15 @@ func smatch(a string, b string, mlen int) bool {
     return a == b[:alen]
   }
   return false
+}
+
+func ternary(b bool, t string, f string) string {
+  if b {
+    return t
+
+  } else {
+    return f
+  }
 }
 
 func formatBytes(b float64) string {
@@ -231,6 +257,10 @@ func log(args *Args, f string, a ...any) error {
   return nil
 }
 
+func udpFlowId(src string, s *net.UDPConn, dst string) string {
+  return fmt.Sprintf("%s[%s] -> %s", src, strings.Split(s.LocalAddr().String(), ":")[1], dst)
+}
+
 func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
   defer wgf.Done()
 
@@ -250,7 +280,7 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 
       wgc.Add(1)
 
-      go func(udpConns map[string]*UDPConn, udpConnsMutex *sync.RWMutex, shutdown chan struct{}, args *Args) {
+      go func(s *net.UDPConn, udpConns map[string]*UDPConn, udpConnsMutex *sync.RWMutex, shutdown chan struct{}, args *Args) {
         defer wgc.Done()
         var stop bool
 
@@ -286,10 +316,10 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
             delete(udpConns, k)
             udpConnsMutex.Unlock()
 
-            log(args, "- UDP: %s -> %s (Tx: %s, Rx: %s)\n", k, target, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
+            log(args, "- UDP: %s (Tx: %s, Rx: %s)\n", udpFlowId(k, s, target), formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
           }
         }
-      }(udpConns, &udpConnsMutex, args.shutdown, args)
+      }(s, udpConns, &udpConnsMutex, args.shutdown, args)
 
       go func(shutdown chan struct{}, udpConns map[string]*UDPConn, udpConnsMutex *sync.RWMutex) {
         <-shutdown
@@ -313,7 +343,7 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
             target := targets[connCount % len(targets)]
 
             if t, err := net.ResolveUDPAddr("udp", target); err == nil {
-              log(args, "+ UDP: %s -> %s\n", addr, t)
+              log(args, "+ UDP: %s\n", udpFlowId(addr.String(), s, t.String()))
 
               if c, err := net.DialUDP("udp", nil, t); err == nil {
                 u = &UDPConn {
@@ -348,11 +378,11 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
                 ok = true
 
               } else {
-                log(args, "- UDP: %s -> %s (Error: %v)\n", addr, t, err)
+                log(args, "- UDP: %s (Error: %v)\n", udpFlowId(addr.String(), s, t.String()), err)
               }
             } else {
-              log(args, "+ UDP: %s -> %s\n", addr, target)
-              log(args, "- UDP: %s -> %s (Error: %v)\n", addr, target, err)
+              log(args, "+ UDP: %s\n", udpFlowId(addr.String(), s, target))
+              log(args, "- UDP: %s (Error: %v)\n", udpFlowId(addr.String(), s, target), err)
             }
           }
 
@@ -381,10 +411,16 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
   }
 }
 
+func tcpFlowId(src net.Conn, dst string, srcStun bool, dstStun bool) string {
+  return fmt.Sprintf("%s[%s%s] -> %s%s", src.RemoteAddr(), strings.Split(src.LocalAddr().String(), ":")[1], ternary(srcStun, "|ST", ""), dst, ternary(dstStun, "|ST", ""))
+}
+
 func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
   defer wgf.Done()
 
-  if tcpAddr, err := net.ResolveTCPAddr("tcp", fwdr); err == nil {
+  srcStun := strings.HasSuffix(fwdr, "|ST")
+
+  if tcpAddr, err := net.ResolveTCPAddr("tcp", strings.TrimSuffix(fwdr, "|ST")); err == nil {
     if s, err := net.ListenTCP("tcp", tcpAddr); err == nil {
       var wgc sync.WaitGroup
       var targetMutex sync.Mutex
@@ -414,29 +450,63 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 
           wgc.Add(1)
 
-          go func(c net.Conn, target string, args *Args, targetMutex *sync.Mutex) {
+          go func(c net.Conn, target string, args *Args, targetMutex *sync.Mutex, srcStun bool) {
             defer wgc.Done()
             defer c.Close()
 
+            dstStun := strings.HasSuffix(target, "|ST")
+            target = strings.TrimSuffix(target, "|ST")
+
             if tcpAddr, err := net.ResolveTCPAddr("tcp", target); err == nil {
-              log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), tcpAddr)
+              log(args, "+ TCP: %s\n", tcpFlowId(c, tcpAddr.String(), srcStun, dstStun))
 
               if t, err := net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), time.Second * 5); err == nil {
+                var cryptoKeys CryptoKeys
+                var todo sync.WaitGroup
+
                 defer t.Close()
 
-                var txRxBytes [2]float64
-                go forwardTcp(c, t, &txRxBytes[0])
-                forwardTcp(t, c, &txRxBytes[1])
+                if srcStun || dstStun {
+                  var err error
+                  if cryptoKeys.public, cryptoKeys.private, err = xwing.GenerateKey(); err == nil {
+                    hdr := []byte{0x01, 0x00, 0x00}
+                    binary.BigEndian.PutUint16(hdr[1:], uint16(len(cryptoKeys.public)))
 
-                log(args, "- TCP: %s -> %s (Tx: %s, Rx: %s)\n", c.RemoteAddr(), tcpAddr, formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
+                    if srcStun {
+                      sw := bufio.NewWriter(c)
+                      sw.Write(append(hdr, cryptoKeys.public...))
+                      sw.Flush()
+                      todo.Add(1)
+                    }
+                    if dstStun {
+                      dw := bufio.NewWriter(t)
+                      dw.Write(append(hdr, cryptoKeys.public...))
+                      dw.Flush()
+                      todo.Add(1)
+                    }
+                  } else {
+                    log(args, "- TCP: %s (Error: %v)\n", tcpFlowId(c, tcpAddr.String(), srcStun, dstStun), err)
+                    return
+                  }
+                }
+
+                var txRxBytes [2]float64
+                var wgs sync.WaitGroup
+                wgs.Add(2)
+
+                go forwardTcp(c, t, srcStun, dstStun, &cryptoKeys, 0, &todo, &txRxBytes[0], args, &wgs)
+                forwardTcp(t, c, dstStun, srcStun, &cryptoKeys, 1, &todo, &txRxBytes[1], args, &wgs)
+                wgs.Wait()
+
+                log(args, "- TCP: %s (Tx: %s, Rx: %s)\n", tcpFlowId(c, tcpAddr.String(), srcStun, dstStun), formatBytes(txRxBytes[0]), formatBytes(txRxBytes[1]))
                 return
 
               } else {
-                log(args, "- TCP: %s -> %s (Error: %v)\n", c.RemoteAddr(), tcpAddr, err)
+                log(args, "- TCP: %s (Error: %v)\n", tcpFlowId(c, tcpAddr.String(), srcStun, dstStun), err)
               }
             } else {
-              log(args, "+ TCP: %s -> %s\n", c.RemoteAddr(), target)
-              log(args, "- TCP: %s -> %s (Error: %v)\n", c.RemoteAddr(), target, err)
+              log(args, "+ TCP: %s\n", tcpFlowId(c, target, srcStun, dstStun), err)
+              log(args, "- TCP: %s (Error: %v)\n", tcpFlowId(c, target, srcStun, dstStun), err)
             }
 
             if args.mode == "FT" {
@@ -450,7 +520,7 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
               }
               targetMutex.Unlock()
             }
-          }(c, target, args, &targetMutex)
+          }(c, target, args, &targetMutex, srcStun)
           connCount += 1
 
         } else {
@@ -469,22 +539,205 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
   }
 }
 
-func forwardTcp(src net.Conn, dst net.Conn, txRxBytes *float64) {
-  r := bufio.NewReader(src)
-  w := bufio.NewWriter(dst)
+func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKeys *CryptoKeys, keyId int, todo *sync.WaitGroup, txRxBytes *float64, args *Args, wgs *sync.WaitGroup) {
+  var pktSeqNum uint64
+  var rbuf []byte
+  var oH int
 
-  buf := make([]byte, bufSize)
+  defer wgs.Done()
 
-  for {
-    if n, err := r.Read(buf); err == nil {
-      w.Write(buf[:n])
-      w.Flush()
+  sr := bufio.NewReader(src)
+  dw := bufio.NewWriter(dst)
+  kemRequired := srcStun
 
-      *txRxBytes += float64(n)
+  if !srcStun && dstStun {
+    oH = 3 + chacha20poly1305.Overhead
+  }
 
+  buf := make([]byte, bufSize - oH)
+  nonce := make([]byte, chacha20poly1305.NonceSize)
+
+  if kemRequired {
+    src.SetReadDeadline(time.Now().Add(time.Second * 5))
+  }
+
+  o: for {
+    if n, err := sr.Read(buf); err == nil {
+      if srcStun {
+        rbuf = append(rbuf, buf[:n]...)
+      }
+      for {
+        if srcStun {
+          if len(rbuf) > 0 {
+            if rbuf[0] == 0x01 {
+              if len(rbuf) > 3 {
+                n = int(binary.BigEndian.Uint16(rbuf[1:3]))
+
+                if len(rbuf) >= (n + 3) {
+                  copy(buf, rbuf[3:n + 3])
+                  rbuf = rbuf[n + 3:]
+
+                } else {
+                  continue o
+                }
+              } else {
+                continue o
+              }
+            } else {
+              if kemRequired {
+                todo.Done()
+              }
+              if keyId == 1 {
+                log(args, "! TCP: %s (Error: portfwd: protocol version mismatch)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun))
+
+              } else {
+                log(args, "! TCP: %s (Error: portfwd: protocol version mismatch)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun))
+              }
+              src.Close()
+              break o
+            }
+          } else {
+            continue o
+          }
+        }
+        if kemRequired {
+          if pktSeqNum == 0 {
+            if ciphertext, skey, err := xwing.Encapsulate(buf[:n]); err == nil {
+              var err error
+              if cryptoKeys.encrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
+                sw := bufio.NewWriter(src)
+                hdr := []byte{0x01, 0x00, 0x00}
+                binary.BigEndian.PutUint16(hdr[1:], uint16(len(ciphertext)))
+                sw.Write(append(hdr, ciphertext...))
+                sw.Flush()
+
+              } else {
+                if keyId == 1 {
+                  log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+                } else {
+                  log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+                }
+                src.Close()
+                todo.Done()
+                break o
+              }
+            } else {
+              if keyId == 1 {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+              } else {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+              }
+              src.Close()
+              todo.Done()
+              break o
+            }
+          } else if pktSeqNum == 1 {
+            todo.Done()
+
+            if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
+              var err error
+              if cryptoKeys.decrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
+                src.SetReadDeadline(time.Time{})
+                kemRequired = false
+                pktSeqNum = 0
+                continue
+
+              } else {
+                if keyId == 1 {
+                  log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+                } else {
+                  log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+                }
+                src.Close()
+                break o
+              }
+            } else {
+              if keyId == 1 {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+              } else {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+              }
+              src.Close()
+              break o
+            }
+          }
+        } else {
+          todo.Wait()
+
+          if srcStun {
+            binary.BigEndian.PutUint64(nonce, pktSeqNum)
+            if _, err := cryptoKeys.decrypt[keyId].Open(buf[:0], nonce, buf[:n], nil); err == nil {
+              n -= chacha20poly1305.Overhead
+
+            } else {
+              if keyId == 1 {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+              } else {
+                log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+              }
+              src.Close()
+              break o
+            }
+          }
+
+          if dstStun {
+            if cryptoKeys.encrypt[keyId ^ 1] != nil {
+              hdr := []byte{0x01, 0x00, 0x00}
+              binary.BigEndian.PutUint16(hdr[1:], uint16(n + chacha20poly1305.Overhead))
+              binary.BigEndian.PutUint64(nonce, pktSeqNum)
+              ciphertext := cryptoKeys.encrypt[keyId ^ 1].Seal(nil, nonce, buf[:n], nil)
+              dw.Write(append(hdr, ciphertext...))
+
+            } else {
+              break o
+            }
+          } else {
+            dw.Write(buf[:n])
+          }
+          dw.Flush()
+
+          *txRxBytes += float64(n)
+        }
+
+        if srcStun || dstStun {
+          if math.MaxUint64 > pktSeqNum {
+            pktSeqNum++
+
+          } else {
+            if keyId == 1 {
+              log(args, "! TCP: %s (Error: portfwd: nonce re-use prohibited)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun))
+
+            } else {
+              log(args, "! TCP: %s (Error: portfwd: nonce re-use prohibited)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun))
+            }
+            src.Close()
+            break o
+          }
+        }
+        if !srcStun {
+          continue o
+        }
+      }
     } else {
-      dst.Close()
+      if errors.Is(err, os.ErrDeadlineExceeded) {
+        if kemRequired {
+          todo.Done()
+        }
+        if keyId == 1 {
+          log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(dst, src.RemoteAddr().String(), dstStun, srcStun), err)
+
+        } else {
+          log(args, "! TCP: %s (Error: %v)\n", tcpFlowId(src, dst.RemoteAddr().String(), srcStun, dstStun), err)
+        }
+        src.Close()
+      }
       break
     }
   }
+  dst.Close()
 }
