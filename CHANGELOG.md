@@ -1,7 +1,7 @@
 ## CHANGELOG
 
 #### 1.1.0 - 29<sup>th</sup> February 2024
-- Added support for ChaCha20-Poly1305 encrypted TCP tunnels using PQC X-Wing Key Encapsulation Mechanisms
+- Added support for ChaCha20-Poly1305 encrypted TCP tunnels using PQC X-Wing Key Encapsulation Mechanism
 - Avoid a race condition by waiting for both sides of the TCP session to close via a WaitGroup
 
 #### 1.0.7 - 20<sup>th</sup> February 2024
