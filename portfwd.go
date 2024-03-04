@@ -37,7 +37,7 @@ import (
   "golang.org/x/crypto/chacha20poly1305"
 )
 
-var Version = "1.1.0"
+var Version = "1.1.1"
 
 const (
   bufSize = 65535
@@ -428,10 +428,10 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
       stargets := fmt.Sprintf("[%s]", strings.Join(targets, ", "))
       log(args, "Creating TCP Forwarder: %s -> %s:%s...\n", fwdr, args.mode, stargets)
 
-      go func(shutdown chan struct{}) {
+      go func(s *net.TCPListener, shutdown chan struct{}) {
         <-shutdown
         s.Close()
-      }(args.shutdown)
+      }(s, args.shutdown)
 
       for {
         if c, err := s.Accept(); err == nil {
