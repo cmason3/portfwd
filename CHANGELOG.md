@@ -1,5 +1,10 @@
 ## CHANGELOG
 
+#### 1.1.1 - 4<sup>th</sup> March 2024
+- Updates to Go files to adhere to Go best practices around modules and packages
+- Updated the TCP shutdown routine to pass the listener socket to avoid a function closure 
+- The `log` function will now lock the mutex for file and screen to avoid `stdout` merging
+
 #### 1.1.0 - 29<sup>th</sup> February 2024
 - Added support for ChaCha20-Poly1305 encrypted TCP tunnels using PQC X-Wing Key Encapsulation Mechanism
 - Avoid a race condition by waiting for both sides of the TCP session to close via a WaitGroup
