@@ -60,10 +60,8 @@ type UDPConn struct {
 }
 
 type CryptoKeys struct {
-  public []byte
-  private []byte
-  encrypt [2]cipher.AEAD
-  decrypt [2]cipher.AEAD
+  public, private []byte
+  encrypt, decrypt [2]cipher.AEAD
 }
 
 func main() {
@@ -231,10 +229,10 @@ func formatBytes(b float64) string {
 func log(args *Args, f string, a ...any) error {
   ts := fmt.Sprintf("[%s] ", time.Now().Format(time.StampMilli))
 
-  if len(args.logFile) > 0 {
-    args.logFileMutex.Lock()
-    defer args.logFileMutex.Unlock()
+  args.logFileMutex.Lock()
+  defer args.logFileMutex.Unlock()
 
+  if len(args.logFile) > 0 {
     if file, err := os.OpenFile(args.logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
       defer file.Close()
 
