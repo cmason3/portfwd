@@ -35,7 +35,7 @@ jobs:
           env GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o portfwd.exe -ldflags="-s -w" -trimpath portfwd.go
           zip portfwd-${{ github.ref_name }}-windows-x86_64.zip portfwd.exe
 
-      - uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v2
         with:
           name: PortFwd ${{ github.ref_name }}
           body: '[CHANGELOG](CHANGELOG.md)'
