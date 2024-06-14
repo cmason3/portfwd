@@ -37,7 +37,7 @@ import (
   "golang.org/x/crypto/chacha20poly1305"
 )
 
-var Version = "1.1.1"
+var Version = "1.1.2"
 
 const (
   bufSize = 65535
