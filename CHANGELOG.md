@@ -1,5 +1,8 @@
 ## CHANGELOG
 
+### [1.1.2] - June 14, 2024
+- Updated dependent Go packages to latest versions
+
 ### [1.1.1] - March 4, 2024
 - Updates to Go files to adhere to Go best practices around modules and packages
 - Updated the TCP shutdown routine to pass the listener socket to avoid a function closure 
@@ -40,6 +43,7 @@
 - Initial release
 
 
+[1.1.2]: https://github.com/cmason3/portfwd/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/cmason3/portfwd/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cmason3/portfwd/compare/v1.0.7...v1.1.0
 [1.0.7]: https://github.com/cmason3/portfwd/compare/v1.0.6...v1.0.7
