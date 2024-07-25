@@ -37,7 +37,7 @@ import (
   "golang.org/x/crypto/chacha20poly1305"
 )
 
-var Version = "1.1.1"
+var Version = "1.1.2"
 
 const (
   bufSize = 65535
@@ -203,13 +203,11 @@ func smatch(a string, b string, mlen int) bool {
   return false
 }
 
-func ternary(b bool, t string, f string) string {
-  if b {
+func ternary[T any](c bool, t, f T) T {
+  if c {
     return t
-
-  } else {
-    return f
   }
+  return f
 }
 
 func formatBytes(b float64) string {

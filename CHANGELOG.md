@@ -1,9 +1,7 @@
 ## CHANGELOG
 
-### [1.1.1] - March 4, 2024
-- Updates to Go files to adhere to Go best practices around modules and packages
-- Updated the TCP shutdown routine to pass the listener socket to avoid a function closure 
-- The `log` function will now lock the mutex for file and screen to avoid `stdout` merging
+### [1.1.2] - In Development
+- Updated `ternary` function so it is generic
 
 ### [1.1.0] - February 29, 2024
 - Added support for ChaCha20-Poly1305 encrypted TCP tunnels using PQC X-Wing Key Encapsulation Mechanism
@@ -40,6 +38,7 @@
 - Initial release
 
 
+[1.1.2]: https://github.com/cmason3/portfwd/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/cmason3/portfwd/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cmason3/portfwd/compare/v1.0.7...v1.1.0
 [1.0.7]: https://github.com/cmason3/portfwd/compare/v1.0.6...v1.0.7
