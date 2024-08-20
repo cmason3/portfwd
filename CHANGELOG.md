@@ -2,6 +2,7 @@
 
 ### [1.1.2] - In Development
 - Updated `ternary` function so it is generic
+- Updated minimal Go version to 1.23
 
 ### [1.1.0] - February 29, 2024
 - Added support for ChaCha20-Poly1305 encrypted TCP tunnels using PQC X-Wing Key Encapsulation Mechanism
