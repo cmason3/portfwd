@@ -1,7 +1,8 @@
 ## CHANGELOG
 
-### [1.1.2] - In Development
+### [1.1.2] - September 2, 2024
 - Updated `ternary` function so it is generic
+- Updated X-Wing KEM based on `draft-connolly-cfrg-xwing-kem-04`
 
 ### [1.1.0] - February 29, 2024
 - Added support for ChaCha20-Poly1305 encrypted TCP tunnels using PQC X-Wing Key Encapsulation Mechanism
