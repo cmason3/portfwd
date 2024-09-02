@@ -37,7 +37,7 @@ import (
   "golang.org/x/crypto/chacha20poly1305"
 )
 
-var Version = "1.1.1"
+var Version = "1.1.2"
 
 const (
   bufSize = 65535
@@ -60,7 +60,7 @@ type UDPConn struct {
 }
 
 type CryptoKeys struct {
-  public, private []byte
+  dk *xwing.DecapsulationKey
   encrypt, decrypt [2]cipher.AEAD
 }
 
@@ -203,13 +203,11 @@ func smatch(a string, b string, mlen int) bool {
   return false
 }
 
-func ternary(b bool, t string, f string) string {
-  if b {
+func ternary[T any](c bool, t, f T) T {
+  if c {
     return t
-
-  } else {
-    return f
   }
+  return f
 }
 
 func formatBytes(b float64) string {
@@ -466,22 +464,24 @@ func tcpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
 
                 if srcStun || dstStun {
                   var err error
-                  if cryptoKeys.public, cryptoKeys.private, err = xwing.GenerateKey(); err == nil {
+
+                  if cryptoKeys.dk, err = xwing.GenerateKey(); err == nil {
                     hdr := []byte{0x01, 0x00, 0x00}
-                    binary.BigEndian.PutUint16(hdr[1:], uint16(len(cryptoKeys.public)))
+                    binary.BigEndian.PutUint16(hdr[1:], xwing.EncapsulationKeySize)
 
                     if srcStun {
                       sw := bufio.NewWriter(c)
-                      sw.Write(append(hdr, cryptoKeys.public...))
+                      sw.Write(append(hdr, cryptoKeys.dk.EncapsulationKey()...))
                       sw.Flush()
                       todo.Add(1)
                     }
                     if dstStun {
                       dw := bufio.NewWriter(t)
-                      dw.Write(append(hdr, cryptoKeys.public...))
+                      dw.Write(append(hdr, cryptoKeys.dk.EncapsulationKey()...))
                       dw.Flush()
                       todo.Add(1)
                     }
+
                   } else {
                     log(args, "- TCP: %s (Error: %v)\n", tcpFlowId(c, tcpAddr.String(), srcStun, dstStun), err)
                     return
@@ -634,7 +634,7 @@ func forwardTcp(src net.Conn, dst net.Conn, srcStun bool, dstStun bool, cryptoKe
           } else if pktSeqNum == 1 {
             todo.Done()
 
-            if skey, err := xwing.Decapsulate(cryptoKeys.private, buf[:n]); err == nil {
+            if skey, err := xwing.Decapsulate(cryptoKeys.dk, buf[:n]); err == nil {
               var err error
               if cryptoKeys.decrypt[keyId], err = chacha20poly1305.New(skey); err == nil {
                 src.SetReadDeadline(time.Time{})
