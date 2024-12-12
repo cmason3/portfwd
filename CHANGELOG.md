@@ -1,5 +1,9 @@
 ## CHANGELOG
 
+### [1.1.3] - In Development
+- Updated package dependencies to latest versions
+- Updated copyright notice in all files
+
 ### [1.1.2] - September 2, 2024
 - Updated `ternary` function so it is generic
 - Updated X-Wing KEM based on `draft-connolly-cfrg-xwing-kem-04`
@@ -44,6 +48,7 @@
 - Initial release
 
 
+[1.1.3]: https://github.com/cmason3/portfwd/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/cmason3/portfwd/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/cmason3/portfwd/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cmason3/portfwd/compare/v1.0.7...v1.1.0
