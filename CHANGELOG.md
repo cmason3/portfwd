@@ -1,6 +1,6 @@
 ## CHANGELOG
 
-### [1.1.3] - In Development
+### [1.1.3] - June 4, 2025
 - Updated package dependencies to latest versions
 - Updated copyright notice in all files
 
@@ -42,7 +42,7 @@
 
 ### [1.0.1] - January 30, 2024
 - Added support for `-conf` so you can specify TCP and/or UDP forwarders within a configuration file
-- Command line arguments can now be shortened so you can now pass `-t` instead of `-tcp` 
+- Command line arguments can now be shortened so you can now pass `-t` instead of `-tcp`
 
 ### 1.0.0 - January 29, 2024
 - Initial release

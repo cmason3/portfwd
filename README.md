@@ -12,7 +12,7 @@ A simple TCP and UDP based port forwarder for IPv4 and IPv6 which supports concu
          -ft-tcp
 ```
 
-You can specify as many TCP and/or UDP forwarders as you wish on the command line - if you omit `bind_host` then it defaults to `localhost` - to listen on all IPs use `0.0.0.0` for IPv4 or `[::]` for IPv6. If you duplicate `bind_host` and `listen_port` then it will load balance between the destinations (round-robin by default). For TCP connections instead of round-robin load balancing you can specify `-ft-tcp`, which will keep using the same destination until it fails and will then move to the next (fault tolerant).
+You can specify as many TCP and/or UDP forwarders as you wish on the command line - if you omit `bind_host` then it defaults to `localhost` - to listen on all IPs use `0.0.0.0` for IPv4 or `[::]` for IPv6. If you duplicate `bind_host` and `listen_port` then it will load balance between the destinations (round-robin by default). For TCP connections, instead of round-robin load balancing you can specify `-ft-tcp`, which will keep using the same destination until it fails and will then move to the next (fault tolerant).
 
 For `bind_host` and `remote_host` you can either specify an IPv4 address (e.g. `192.0.2.1`), IPv6 address (e.g. `[2001:db8::1]`) or a DNS hostname (e.g. `host.domain`).
 
