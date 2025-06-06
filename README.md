@@ -45,7 +45,7 @@ sequenceDiagram
 
     par Host A to Host B
       A-->A: Generate Key Pair (AkE, AkD)
-      A->>B: Encapsulation Key (AkE)
+      A->>B: Encapsulation Key (AkE)<br />= SKey, Ciphertext
     and Host B to Server
       B->>S: SYN
       S->>B: SYN, ACK
@@ -53,7 +53,7 @@ sequenceDiagram
     end
 
     B-->B: Generate Key Pair (BkE, BkD)
-    B->>A: Encapsulation Key (BkE)
+    B->>A: Encapsulation Key (BkE)<br />= SKey, Ciphertext
 
     par Host A to Host B
       A-->A: Encapsulate BkE
