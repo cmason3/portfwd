@@ -43,12 +43,14 @@ sequenceDiagram
     A->>B: ACK
 
     A-->A: Generate Key
+    A->>B: Encapsulation Key
 
     B->>S: SYN
     S->>B: SYN, ACK
     B->>S: ACK
 
     B-->B: Generate Key
+    B->>A: Encapsulation Key
 
 ```
 
