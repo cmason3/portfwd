@@ -43,14 +43,16 @@ sequenceDiagram
     B->>A: SYN, ACK
     A->>B: ACK
 
-    A-->A: Generate Key
-    A->>B: Encapsulation Key
+    par A to B
+      A-->A: Generate Key Pair
+      A->>B: Encapsulation Key
+    and B to A
+      B->>S: SYN
+      S->>B: SYN, ACK
+      B->>S: ACK
+    end
 
-    B->>S: SYN
-    S->>B: SYN, ACK
-    B->>S: ACK
-
-    B-->B: Generate Key
+    B-->B: Generate Key Pair
     B->>A: Encapsulation Key
 
 ```
