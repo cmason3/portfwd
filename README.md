@@ -43,10 +43,10 @@ sequenceDiagram
     B->>A: SYN, ACK
     A->>B: ACK
 
-    par A to B
+    par Host A to Host B
       A-->A: Generate Key Pair
       A->>B: Encapsulation Key
-    and B to A
+    and Host B to Server
       B->>S: SYN
       S->>B: SYN, ACK
       B->>S: ACK
