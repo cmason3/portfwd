@@ -44,8 +44,8 @@ sequenceDiagram
     A->>B: ACK
 
     par Host A to Host B
-      A-->A: Generate Key Pair (AkE, AkD)
-      A->>B: Encapsulation Key (AkE)
+      A-->A: Generate Key Pair (Encap<sup>A</sup>, Decap<sup>A</sup>)
+      A->>B: Encapsulation Key (Encap<sup>A</sup>)
     and Host B to Server
       B->>S: SYN
       S->>B: SYN, ACK
