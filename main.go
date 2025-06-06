@@ -106,7 +106,7 @@ func main() {
 
     } else {
       fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [<bind_host>:]<listen_port>[s]:<remote_host>:<remote_port>[s]\n")
-      fmt.Fprintf(os.Stderr, "               -udp [<bind_host>:]<listen_port>:<remote_host>:<remote_port>\n")
+      fmt.Fprintf(os.Stderr, "               -udp [<bind_host>:]<listen_port>[s]:<remote_host>:<remote_port>[s]\n")
       fmt.Fprintf(os.Stderr, "               -logfile <portfwd.log>\n")
       fmt.Fprintf(os.Stderr, "               -config <portfwd.conf>\n")
       fmt.Fprintf(os.Stderr, "               -ft-tcp\n")
@@ -253,8 +253,8 @@ func log(args *Args, f string, a ...any) error {
   return nil
 }
 
-func udpFlowId(src string, s *net.UDPConn, dst string) string {
-  return fmt.Sprintf("%s[%s] -> %s", src, strings.Split(s.LocalAddr().String(), ":")[1], dst)
+func udpFlowId(src string, s *net.UDPConn, dst string, srcStun bool, dstStun bool) string {
+  return fmt.Sprintf("%s[%s%s] -> %s%s", src, strings.Split(s.LocalAddr().String(), ":")[1], ternary(srcStun, "|ST", ""), dst, ternary(dstStun, "|ST", ""))
 }
 
 func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
@@ -263,7 +263,9 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
   var udpConnsMutex sync.RWMutex
   udpConns := make(map[string]*UDPConn)
 
-  if udpAddr, err := net.ResolveUDPAddr("udp", fwdr); err == nil {
+  srcStun := strings.HasSuffix(fwdr, "|ST")
+
+  if udpAddr, err := net.ResolveUDPAddr("udp", strings.TrimSuffix(fwdr, "|ST")); err == nil {
     if s, err := net.ListenUDP("udp", udpAddr); err == nil {
       defer s.Close()
 

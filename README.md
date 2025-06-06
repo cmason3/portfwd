@@ -31,10 +31,19 @@ If you specify "s" after the port number then it will establish a secure tunnel 
 
 ```mermaid
 sequenceDiagram
-    participant A as Host A
-    participant B as Host B
-    A->>B: Public Key
-    B->>A: Public Key
+    participant C as Client
+    participant A as PortFwd Host A
+    participant B as PortFwd Host B
+    participant S as Server
+    C->>A: SYN
+    A->>C: SYN, ACK
+    C->>A: ACK
+    A->>B: SYN
+    B->>A: SYN, ACK
+    A->>B: ACK
+    B->>S: SYN
+    S->>B: SYN, ACK
+    B->>S: ACK
 ```
 
 Each TCP session will use a different set of encryption and decryption keys that are generated randomly when the TCP session is established. The maximum amount of data a single TCP session can send using the same set of keys is 2<sup>64</sup> packets (18.4 quintillion) as we use a `uint64` packet counter as the `nonce`. It is extremely unlikely that any TCP session is going to get anywhere near this number, but to prevent `nonce` re-use it will terminate the TCP session if you do.
