@@ -56,20 +56,32 @@ sequenceDiagram
     B->>A: Send EncapB
 
     par Host A to Host B
-      A-->A: Encapsulate(EncapB)<br />= Shared Key (EncA), Ciphertext (CTA)
-      A->>B: Send CTA
+      A-->A: Encapsulate(EncapB)<br />= Shared Key (EncB), Ciphertext (CTB)
+      A->>B: Send CTB
     and Host B to Host A
-      B-->B: Encapsulate(EncapA)<br />= Shared Key (EncB), Ciphertext (CTB)
-      B->>A: Send CTB
+      B-->B: Encapsulate(EncapA)<br />= Shared Key (EncA), Ciphertext (CTA)
+      B->>A: Send CTA
     end
 
     par Host A to Host B
-      A-->A: Decapsulate(DecapA, CTB)<br /> = Shared Key (DecB)
+      A-->A: Decapsulate(DecapA, CTA)<br /> = Shared Key (DecB)
     and Host B to Host A
-      B-->B: Decapsulate(DecapB, CTA)<br /> = Shared Key (DecA)
+      B-->B: Decapsulate(DecapB, CTB)<br /> = Shared Key (DecA)
     end
 
     Note over A,B: Key Exchange Complete
+
+    C->>A: Send Data
+    A-->A: Encrypt Data (EncB)
+    A->>B: Send Encrypted Data
+    B-->B: Decrypt Data (DecA)
+    B->>S: Send Data
+
+    S->>B: Send Data
+    B-->B: Encrypt Data (EncA)
+    B->>A: Send Encrypted Data
+    A-->A: Decrypt Data (DecB)
+    A->>C: Send Data
 ```
 
 Each TCP session will use a different set of encryption and decryption keys that are generated randomly when the TCP session is established. The maximum amount of data a single TCP session can send using the same set of keys is 2<sup>64</sup> packets (18.4 quintillion) as we use a `uint64` packet counter as the `nonce`. It is extremely unlikely that any TCP session is going to get anywhere near this number, but to prevent `nonce` re-use it will terminate the TCP session if you do.
