@@ -71,14 +71,16 @@ sequenceDiagram
 
     Note over A,B: Key Exchange Complete<br />EncA == DecB, EncB == DecA
 
-    loop
-      par
+    par
+      loop
         C->>A: Send Data
         A-->A: Encrypt Data (EncB)
         A->>B: Send Encrypted Data
         B-->B: Decrypt Data (DecA)
         B->>S: Send Data
-      and
+      end
+    and
+      loop
         S->>B: Send Data
         B-->B: Encrypt Data (EncA)
         B->>A: Send Encrypted Data
