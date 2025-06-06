@@ -32,9 +32,10 @@ If you specify "s" after the port number then it will establish a secure tunnel 
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant A as PortFwd Host A
-    participant B as PortFwd Host B
+    participant A as PortFwd<br />Host A
+    participant B as PortFwd<br />Host B
     participant S as Server
+    Note over A,B: Secure Tunnel
     C->>A: SYN
     A->>C: SYN, ACK
     C->>A: ACK
