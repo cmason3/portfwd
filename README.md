@@ -43,10 +43,10 @@ sequenceDiagram
     B->>A: SYN, ACK
     A->>B: ACK
 
-    par Host A to Host B
+    par
       A-->A: Generate Key Pair<br />= EncapA, DecapA
       A->>B: Send EncapA
-    and Host B to Server
+    and
       B->>S: SYN
       S->>B: SYN, ACK
       B->>S: ACK
@@ -55,29 +55,29 @@ sequenceDiagram
     B-->B: Generate Key Pair<br />= EncapB, DecapB
     B->>A: Send EncapB
 
-    par Host A to Host B
+    par
       A-->A: Encapsulate(EncapB)<br />= Shared Key (EncB), Ciphertext (CTB)
       A->>B: Send CTB
-    and Host B to Host A
+    and
       B-->B: Encapsulate(EncapA)<br />= Shared Key (EncA), Ciphertext (CTA)
       B->>A: Send CTA
     end
 
-    par Host A to Host B
+    par
       A-->A: Decapsulate(DecapA, CTA)<br /> = Shared Key (DecB)
-    and Host B to Host A
+    and
       B-->B: Decapsulate(DecapB, CTB)<br /> = Shared Key (DecA)
     end
 
-    Note over A,B: Key Exchange Complete
+    Note over A,B: Key Exchange Complete<br />EncA == DecB, EncB == DecA
 
-    par Host A to Host B
+    par
       C->>A: Send Data
       A-->A: Encrypt Data (EncB)
       A->>B: Send Encrypted Data
       B-->B: Decrypt Data (DecA)
       B->>S: Send Data
-    and Host B to Host A
+    and
       S->>B: Send Data
       B-->B: Encrypt Data (EncA)
       B->>A: Send Encrypted Data
