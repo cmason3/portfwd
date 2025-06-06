@@ -42,7 +42,7 @@ sequenceDiagram
     B->>A: SYN, ACK
     A->>B: ACK
 
-    Note right of A: Generate Key Pair
+    A-->A: Generate Key
 
     B->>S: SYN
     S->>B: SYN, ACK
