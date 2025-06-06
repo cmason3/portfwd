@@ -44,22 +44,32 @@ sequenceDiagram
     A->>B: ACK
 
     par Host A to Host B
-      A-->A: Generate Key Pair (Encap<sup>A</sup>, Decap<sup>A</sup>)
-      A->>B: Encapsulation Key (Encap<sup>A</sup>)
+      A-->A: Generate Key Pair<br />= EncapA, DecapA
+      A->>B: Send EncapA
     and Host B to Server
       B->>S: SYN
       S->>B: SYN, ACK
       B->>S: ACK
     end
 
-    B-->B: Generate Key Pair (BkE, BkD)
-    B->>A: Encapsulation Key (BkE)
+    B-->B: Generate Key Pair<br />= EncapB, DecapB
+    B->>A: Send EncapB
 
     par Host A to Host B
-      A-->A: Encapsulate BkE<br />= SKey, Ciphertext
+      A-->A: Encapsulate(EncapB)<br />= Shared Key (EncA), Ciphertext (CTA)
+      A->>B: Send CTA
     and Host B to Host A
-      B-->B: Encapsulate AkE<br />= SKey, Ciphertext
+      B-->B: Encapsulate(EncapA)<br />= Shared Key (EncB), Ciphertext (CTB)
+      B->>A: Send CTB
     end
+
+    par Host A to Host B
+      A-->A: Decapsulate(DecapA, CTB)<br /> = Shared Key (DecB)
+    and Host B to Host A
+      B-->B: Decapsulate(DecapB, CTA)<br /> = Shared Key (DecA)
+    end
+
+    Note over A,B: Key Exchange Complete
 ```
 
 Each TCP session will use a different set of encryption and decryption keys that are generated randomly when the TCP session is established. The maximum amount of data a single TCP session can send using the same set of keys is 2<sup>64</sup> packets (18.4 quintillion) as we use a `uint64` packet counter as the `nonce`. It is extremely unlikely that any TCP session is going to get anywhere near this number, but to prevent `nonce` re-use it will terminate the TCP session if you do.
