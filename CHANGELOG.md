@@ -1,6 +1,6 @@
 ## CHANGELOG
 
-### [1.1.4] - In Development
+### [1.1.4] - June 9, 2025
 - Output an error if you try and use Secure Tunnel with UDP as it isn't supported
 - Updated `README.md` to provide a sequence diagram for TCP Secure Tunnel.
 
