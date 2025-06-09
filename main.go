@@ -37,7 +37,7 @@ import (
   "golang.org/x/crypto/chacha20poly1305"
 )
 
-var Version = "1.2.0"
+var Version = "1.1.4"
 
 const (
   bufSize = 65535
@@ -106,10 +106,10 @@ func main() {
 
     } else {
       fmt.Fprintf(os.Stderr, "Usage: portfwd -tcp [<bind_host>:]<listen_port>[s]:<remote_host>:<remote_port>[s]\n")
-      fmt.Fprintf(os.Stderr, "               -udp [<bind_host>:]<listen_port>[s]:<remote_host>:<remote_port>[s]\n")
+      fmt.Fprintf(os.Stderr, "               -udp [<bind_host>:]<listen_port>:<remote_host>:<remote_port>\n")
       fmt.Fprintf(os.Stderr, "               -logfile <portfwd.log>\n")
       fmt.Fprintf(os.Stderr, "               -config <portfwd.conf>\n")
-      fmt.Fprintf(os.Stderr, "               -ft-tcp\n")
+      fmt.Fprintf(os.Stderr, "               -ft-tcp\n\n")
     }
     os.Exit(1)
   }
@@ -166,7 +166,14 @@ func parseArgs() (Args, error) {
               rst := regexp.MustCompile(`(?i)s$`)
               m[2] = rst.ReplaceAllString(m[2], "|ST")
               m[4] = rst.ReplaceAllString(m[4], "|ST")
+
               mkey := os.Args[i][1:2] + ":" + strings.Join(m[1:3], ":")
+              
+              if strings.HasPrefix(mkey, "u:") {
+                if strings.Contains(m[2], "|ST") || strings.Contains(m[4], "|ST") {
+                  return args, fmt.Errorf("invalid forwarder: %s", fwdr)
+                }
+              }
               args.fwdrs[mkey] = append(args.fwdrs[mkey], strings.Join(m[3:], ":"))
 
             } else {
@@ -253,8 +260,8 @@ func log(args *Args, f string, a ...any) error {
   return nil
 }
 
-func udpFlowId(src string, s *net.UDPConn, dst string, srcStun bool, dstStun bool) string {
-  return fmt.Sprintf("%s[%s%s] -> %s%s", src, strings.Split(s.LocalAddr().String(), ":")[1], ternary(srcStun, "|ST", ""), dst, ternary(dstStun, "|ST", ""))
+func udpFlowId(src string, s *net.UDPConn, dst string) string {
+  return fmt.Sprintf("%s[%s] -> %s", src, strings.Split(s.LocalAddr().String(), ":")[1], dst)
 }
 
 func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args) {
@@ -263,9 +270,7 @@ func udpForwarder(fwdr string, targets []string, wgf *sync.WaitGroup, args *Args
   var udpConnsMutex sync.RWMutex
   udpConns := make(map[string]*UDPConn)
 
-  srcStun := strings.HasSuffix(fwdr, "|ST")
-
-  if udpAddr, err := net.ResolveUDPAddr("udp", strings.TrimSuffix(fwdr, "|ST")); err == nil {
+  if udpAddr, err := net.ResolveUDPAddr("udp", fwdr); err == nil {
     if s, err := net.ListenUDP("udp", udpAddr); err == nil {
       defer s.Close()
 

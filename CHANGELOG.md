@@ -1,7 +1,8 @@
 ## CHANGELOG
 
-### [1.2.0] - In Development
-- Add support for encrypted UDP tunnels using PQC X-Wing KEM
+### [1.1.4] - In Development
+- Output an error if you try and use Secure Tunnel with UDP as it isn't supported
+- Updated `README.md` to provide a sequence diagram for TCP Secure Tunnel.
 
 ### [1.1.3] - June 4, 2025
 - Updated package dependencies to latest versions
@@ -51,7 +52,7 @@
 - Initial release
 
 
-[1.2.0]: https://github.com/cmason3/portfwd/compare/v1.1.3...v1.2.0
+[1.1.4]: https://github.com/cmason3/portfwd/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/cmason3/portfwd/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/cmason3/portfwd/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/cmason3/portfwd/compare/v1.1.0...v1.1.1
