@@ -29,6 +29,67 @@ Command line arguments can be shortened as long as they don't become ambiguous (
 
 If you specify "s" after the port number then it will establish a secure tunnel between two instances of PortFwd. It uses the draft X-Wing KEM (https://datatracker.ietf.org/doc/html/draft-connolly-cfrg-xwing-kem), which is a hybrid post-quantum key encapsulation mechanism to generate ephemeral encryption/decryption keys, which are used by ChaCha20-Poly1305. It should be noted that this only provides confidentiality and integrity - it doesn't authenticate the hosts.
 
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as PortFwd<br />Host A
+    participant B as PortFwd<br />Host B
+    participant S as Server
+    Note over A,B: Secure Tunnel
+    C->>A: SYN
+    A->>C: SYN, ACK
+    C->>A: ACK
+    A->>B: SYN
+    B->>A: SYN, ACK
+    A->>B: ACK
+
+    par
+      A-->A: Generate Key Pair<br />= EncapA, DecapA
+      A->>B: Send EncapA
+    and
+      B->>S: SYN
+      S->>B: SYN, ACK
+      B->>S: ACK
+    end
+
+    B-->B: Generate Key Pair<br />= EncapB, DecapB
+    B->>A: Send EncapB
+
+    par
+      A-->A: Encapsulate(EncapB)<br />= Shared Key (EncB), Ciphertext (CTB)
+      A->>B: Send CTB
+    and
+      B-->B: Encapsulate(EncapA)<br />= Shared Key (EncA), Ciphertext (CTA)
+      B->>A: Send CTA
+    end
+
+    par
+      A-->A: Decapsulate(DecapA, CTA)<br /> = Shared Key (DecB)
+    and
+      B-->B: Decapsulate(DecapB, CTB)<br /> = Shared Key (DecA)
+    end
+
+    Note over A,B: Key Exchange Complete<br />EncA == DecB, EncB == DecA
+
+    par
+      loop
+        C->>A: Send Data
+        A-->A: Encrypt Data (EncB)
+        A->>B: Send Encrypted Data
+        B-->B: Decrypt Data (DecA)
+        B->>S: Send Data
+      end
+    and
+      loop
+        S->>B: Send Data
+        B-->B: Encrypt Data (EncA)
+        B->>A: Send Encrypted Data
+        A-->A: Decrypt Data (DecB)
+        A->>C: Send Data
+      end
+    end
+```
+
 Each TCP session will use a different set of encryption and decryption keys that are generated randomly when the TCP session is established. The maximum amount of data a single TCP session can send using the same set of keys is 2<sup>64</sup> packets (18.4 quintillion) as we use a `uint64` packet counter as the `nonce`. It is extremely unlikely that any TCP session is going to get anywhere near this number, but to prevent `nonce` re-use it will terminate the TCP session if you do.
 
 To create a secure tunnel for HTTP traffic you could use it as follows:
