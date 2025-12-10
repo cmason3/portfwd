@@ -1,6 +1,6 @@
 /*
  * PortFwd - TCP/UDP Port Forwarder
- * Copyright (c) 2024-2025 Chris Mason <chris@netnix.org>
+ * Copyright (c) 2024-2026 Chris Mason <chris@netnix.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -37,7 +37,7 @@ import (
   "golang.org/x/crypto/chacha20poly1305"
 )
 
-var Version = "1.1.4"
+var Version = "1.1.5"
 
 const (
   bufSize = 65535
@@ -99,7 +99,7 @@ func main() {
     }
   } else {
     fmt.Fprintf(os.Stderr, "PortFwd v%s - TCP/UDP Port Forwarder\n", Version)
-    fmt.Fprintf(os.Stderr, "Copyright (c) 2024-2025 Chris Mason <chris@netnix.org>\n\n")
+    fmt.Fprintf(os.Stderr, "Copyright (c) 2024-2026 Chris Mason <chris@netnix.org>\n\n")
 
     if len(err.Error()) > 0 {
       fmt.Fprintf(os.Stderr, "Error: %v\n", err)
