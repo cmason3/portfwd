@@ -1,6 +1,6 @@
 ## CHANGELOG
 
-### [1.1.5] - In Development
+### [1.1.5] - December 14, 2025
 - Updated package dependencies to latest versions
 - Updated copyright notice in all files
 
