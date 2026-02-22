@@ -1,12 +1,10 @@
 module github.com/cmason3/portfwd
 
-go 1.24.0
-
-toolchain go1.24.3
+go 1.25.0
 
 require (
-	filippo.io/mlkem768 v0.0.0-20250818110517-29047ffe79fb
-	golang.org/x/crypto v0.46.0
+	filippo.io/mlkem768 v0.0.0-20260214141301-2e7bebc7d88d
+	golang.org/x/crypto v0.48.0
 )
 
-require golang.org/x/sys v0.39.0 // indirect
+require golang.org/x/sys v0.41.0 // indirect

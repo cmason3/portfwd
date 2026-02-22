@@ -1,6 +1,6 @@
-filippo.io/mlkem768 v0.0.0-20250818110517-29047ffe79fb h1:9eVxcquiUiJn/f8DtnqmsN/8Asqw+h9b1+sM3T/Wl44=
-filippo.io/mlkem768 v0.0.0-20250818110517-29047ffe79fb/go.mod h1:ncYN/Z4GaQBV6TIbmQ7+lIaI+qGXCmZr88zrXHneVHs=
-golang.org/x/crypto v0.46.0 h1:cKRW/pmt1pKAfetfu+RCEvjvZkA9RimPbh7bhFjGVBU=
-golang.org/x/crypto v0.46.0/go.mod h1:Evb/oLKmMraqjZ2iQTwDwvCtJkczlDuTmdJXoZVzqU0=
-golang.org/x/sys v0.39.0 h1:CvCKL8MeisomCi6qNZ+wbb0DN9E5AATixKsvNtMoMFk=
-golang.org/x/sys v0.39.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
+filippo.io/mlkem768 v0.0.0-20260214141301-2e7bebc7d88d h1:YyLyABjdrdt2l/E6JAnku4BjhEDXhxQD2bPOnOvy8/M=
+filippo.io/mlkem768 v0.0.0-20260214141301-2e7bebc7d88d/go.mod h1:ym4egWKLpazdho3bHx0xuQlCq02ttP+vhxxKO8LgO9c=
+golang.org/x/crypto v0.48.0 h1:/VRzVqiRSggnhY7gNRxPauEQ5Drw9haKdM0jqfcCFts=
+golang.org/x/crypto v0.48.0/go.mod h1:r0kV5h3qnFPlQnBSrULhlsRfryS2pmewsg+XfMgkVos=
+golang.org/x/sys v0.41.0 h1:Ivj+2Cp/ylzLiEU89QhWblYnOE9zerudt9Ftecq2C6k=
+golang.org/x/sys v0.41.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
